@@ -9,6 +9,7 @@ type CandidateCat struct {
 var USER = CandidateCat{}
 var DEPARTMENT = CandidateCat{}
 var POSITION = CandidateCat{}
+var FIELD = CandidateCat{}
 
 // 需要手动处理的步骤类型列表
 var Cats = [3]CandidateCat{}
@@ -22,6 +23,9 @@ func init() {
 
 	POSITION.Code = "position"
 	POSITION.Title = "职位"
+
+	FIELD.Code = "field"
+	FIELD.Title = "字段"
 
 	Cats = [3]CandidateCat{USER, DEPARTMENT, POSITION}
 }

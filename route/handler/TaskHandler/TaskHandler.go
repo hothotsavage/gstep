@@ -26,7 +26,7 @@ func Pass(writer http.ResponseWriter, request *http.Request) {
 	//检查流程提交人是否是候选人
 	pProcess := dao.CheckById[entity.Process](pTask.ProcessId, tx)
 	pTemplate := dao.CheckById[entity.Template](pProcess.TemplateId, tx)
-	StepService.CheckCandidate(dto.UserId, &pTemplate.RootStep, pTask.StepId, tx)
+	StepService.CheckCandidate(dto.UserId, dto.Form, &pTemplate.RootStep, pTask.StepId, tx)
 
 	//检查提交人重复提交
 	TaskAssigneeDao.CheckAssigneeCanSubmit(pTask.Id, dto.UserId, TaskState.PASS.Code, tx)
@@ -56,7 +56,7 @@ func Retreat(writer http.ResponseWriter, request *http.Request) {
 	//检查提交人重复提交
 	TaskAssigneeDao.CheckAssigneeCanSubmit(pTask.Id, dto.UserId, TaskState.PASS.Code, tx)
 	//校验提交人在候选人列表中
-	StepService.CheckCandidate(dto.UserId, &pTemplate.RootStep, pTask.StepId, tx)
+	StepService.CheckCandidate(dto.UserId, dto.Form, &pTemplate.RootStep, pTask.StepId, tx)
 	TaskService.Retreat(&dto, tx)
 
 	//任务状态变更通知
@@ -78,7 +78,7 @@ func Refuse(writer http.ResponseWriter, request *http.Request) {
 	//检查流程提交人是否是候选人
 	pProcess := dao.CheckById[entity.Process](pTask.ProcessId, tx)
 	pTemplate := dao.CheckById[entity.Template](pProcess.TemplateId, tx)
-	StepService.CheckCandidate(dto.UserId, &pTemplate.RootStep, pTask.StepId, tx)
+	StepService.CheckCandidate(dto.UserId, dto.Form, &pTemplate.RootStep, pTask.StepId, tx)
 
 	//检查提交人重复提交
 	TaskAssigneeDao.CheckAssigneeCanSubmit(pTask.Id, dto.UserId, TaskState.REFUSE.Code, tx)

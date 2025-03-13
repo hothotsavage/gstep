@@ -170,7 +170,7 @@ func FindPrevAuditStepsByEndId(pRootStep *entity.Step, beginStepId int, endStepI
 }
 
 // 检查指定步骤的候选人
-func CheckCandidate(userId string, pRootStep *entity.Step, stepId int, tx *gorm.DB) {
+func CheckCandidate(userId string, form *map[string]any, pRootStep *entity.Step, stepId int, tx *gorm.DB) {
 	pStep := FindStep(pRootStep, stepId)
 	if nil == pStep {
 		panic(ServerError.New("找不到流程步骤"))
@@ -188,6 +188,11 @@ func CheckCandidate(userId string, pRootStep *entity.Step, stepId int, tx *gorm.
 			departments := DepartmentDao.GetGrandsonDepartments(v.Value, tx)
 			isIn := UserDao.IsUserInDepartments(userId, departments, tx)
 			if isIn {
+				return
+			}
+		} else if v.Category == CandidateCat.FIELD.Code {
+			formCandidate := (*form)[v.Value]
+			if formCandidate == userId {
 				return
 			}
 		}

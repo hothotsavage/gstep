@@ -301,7 +301,7 @@ func NewStartTask(pProcess *entity.Process, startUserId string, form *map[string
 	rootStep := processVo.Template.RootStep
 
 	//检查流程提交人是否是候选人
-	StepService.CheckCandidate(startUserId, &rootStep, task.StepId, tx)
+	StepService.CheckCandidate(startUserId, form, &rootStep, task.StepId, tx)
 
 	//创建启动任务
 	task.StepId = rootStep.Id
