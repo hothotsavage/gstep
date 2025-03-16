@@ -140,10 +140,10 @@ func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) int {
 	assignee.ProcessId = pStartedTask.ProcessId
 	assignee.StepId = pStartedTask.StepId
 	assignee.TaskId = pStartedTask.Id
-	assignee.UserId = processRefuseDto.UserId
 	assignee.State = TaskState.REFUSE.Code
 	assignee.Form = processRefuseDto.Form
 	assignee.SubmitIndex = submitIndex
+	assignee.UserId = processRefuseDto.UserId
 	dao.SaveOrUpdate(&assignee, tx)
 
 	//保存任务表单
