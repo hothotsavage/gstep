@@ -23,16 +23,16 @@ func Save(writer http.ResponseWriter, request *http.Request) {
 		oldTemplate.RootStep = template.RootStep
 		oldTemplate.Title = template.Title
 		oldTemplate.Version = template.Version
-	} else if template.TemplateId > 0 { //已存在模板,新版本
-		latestTemplate := TemplateDao.GetLatestVersionByTemplateId(template.TemplateId, tx)
+	} else if template.MouldId > 0 { //已存在模板,新版本
+		latestTemplate := TemplateDao.GetLatestVersion(template.MouldId, tx)
 		if nil == latestTemplate {
 			AjaxJson.Fail("无效的流程模板id").Response(writer)
 			return
 		}
-		newVersion := TemplateDao.NewVersion(template.TemplateId, tx)
+		newVersion := TemplateDao.NewVersion(template.MouldId, tx)
 		template.Version = newVersion
 	} else { //新模板
-		template.TemplateId = TemplateDao.NewTemplateId(tx)
+		template.MouldId = TemplateDao.NewTemplateId(tx)
 		template.Version = 1
 	}
 	dao.SaveOrUpdate(&template, tx)

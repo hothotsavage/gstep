@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"fmt"
 	"github.com/hothotsavage/gstep/util/LocalTime"
 	"github.com/hothotsavage/gstep/util/ServerError"
 	"github.com/hothotsavage/gstep/util/db/entity"
@@ -50,7 +51,7 @@ func CheckById[T entity.CommonEntity, I int | string](id I, tx *gorm.DB) *T {
 
 	err := tx.Table(detail.TableName()).Where("id=?", id).First(&detail).Error
 	if nil != err {
-		panic(ServerError.New("未找到记录:" + err.Error()))
+		panic(ServerError.New(fmt.Sprintf("未找到(表:%s id=%d)记录:%s", detail.TableName(), id, err.Error())))
 	}
 
 	newId := detail.GetId()

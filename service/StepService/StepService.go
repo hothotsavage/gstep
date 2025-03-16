@@ -13,7 +13,6 @@ import (
 
 func GetStepByTemplateId(templateId int, stepId int, tx *gorm.DB) *entity.Step {
 	template := dao.CheckById[entity.Template](templateId, tx)
-
 	pStep := FindStep(&template.RootStep, stepId)
 	return pStep
 }

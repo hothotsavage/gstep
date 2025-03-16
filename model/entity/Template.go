@@ -6,11 +6,11 @@ import (
 
 type Template struct {
 	entity.BaseEntity
-	TemplateId int     `json:"templateId"`
-	Title      string  `json:"title"`
-	Version    int     `json:"version"`
-	RootStep   Step    `json:"rootStep" gorm:"serializer:json"`
-	Fields     []Field `json:"fields" gorm:"serializer:json"`
+	MouldId  int     `json:"mouldId"`
+	Title    string  `json:"title"`
+	Version  int     `json:"version"`
+	RootStep Step    `json:"rootStep" gorm:"serializer:json"`
+	Fields   []Field `json:"fields" gorm:"serializer:json"`
 }
 
 func (e Template) TableName() string {

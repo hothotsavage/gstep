@@ -11,7 +11,7 @@ import (
 
 func Query(dto *dto.TemplateQueryDto, tx *gorm.DB) []entity.Template {
 	list := []entity.Template{}
-	sql := "select id,template_id,title,version,created_at,updated_at,deleted_at from template " +
+	sql := "select id,mould_id,title,version,created_at,updated_at,deleted_at from template " +
 		" where 1=1 "
 	if dto.VersionId > 0 {
 		sql = sql + " and id=" + strconv.Itoa(dto.VersionId)
@@ -35,7 +35,7 @@ func QueryDetail(dto *dto.TemplateQueryDetailDto, tx *gorm.DB) *entity.Template 
 	} else if dto.TemplateId > 0 && dto.VersionId > 0 {
 		pTemplate = TemplateDao.GetTemplate(dto.TemplateId, dto.VersionId, tx)
 	} else if dto.TemplateId > 0 {
-		pTemplate = TemplateDao.GetLatestVersionByTemplateId(dto.TemplateId, tx)
+		pTemplate = TemplateDao.GetLatestVersion(dto.TemplateId, tx)
 	}
 
 	return pTemplate
@@ -46,7 +46,7 @@ func QueryInfo(dto *dto.TemplateQueryInfoDto, tx *gorm.DB) *entity.Template {
 	if dto.VersionId > 0 {
 		pTemplate = dao.CheckById[entity.Template](dto.VersionId, tx)
 	} else if dto.TemplateId > 0 {
-		pTemplate = TemplateDao.GetLatestVersionByTemplateId(dto.TemplateId, tx)
+		pTemplate = TemplateDao.GetLatestVersion(dto.TemplateId, tx)
 	}
 
 	pTemplate.RootStep = entity.Step{}

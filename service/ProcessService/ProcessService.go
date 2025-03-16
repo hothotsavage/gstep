@@ -25,13 +25,13 @@ func Start(processStartDto *dto.ProcessStartDto, tx *gorm.DB) int {
 	copier.Copy(process, processStartDto)
 
 	//创建流程
-	pTemplate := TemplateDao.GetLatestVersionByTemplateId(processStartDto.TemplateId, tx)
+	pTemplate := TemplateDao.GetLatestVersion(processStartDto.MouldId, tx)
 	if nil == pTemplate {
 		panic(ServerError.New("无效的模板"))
 	}
 
 	//校验流程发起人是否在候选人列表中
-	StepService.CheckStepCandidate(processStartDto.UserId, processStartDto.Form, processStartDto.TemplateId, 1, tx)
+	StepService.CheckStepCandidate(processStartDto.UserId, processStartDto.Form, pTemplate.Id, 1, tx)
 
 	process.TemplateId = pTemplate.Id
 	process.StartUserId = processStartDto.UserId
@@ -78,6 +78,8 @@ func Pass(processPassDto dto.ProcessPassDto, tx *gorm.DB) int {
 	//保存任务提交人
 	submitIndex := TaskAssigneeDao.GetMaxSubmitIndex(pStartedTask.Id, tx) + 1
 	assignee := entity.TaskAssignee{}
+	assignee.ProcessId = pStartedTask.ProcessId
+	assignee.StepId = pStartedTask.StepId
 	assignee.TaskId = pStartedTask.Id
 	assignee.UserId = processPassDto.UserId
 	assignee.State = TaskState.PASS.Code

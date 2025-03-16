@@ -140,6 +140,7 @@ func NewTaskByStep(pStep *entity.Step, pProcess *entity.Process, tx *gorm.DB) *e
 	task.Title = pStep.Title
 	task.Category = pStep.Category
 	task.AuditMethod = pStep.AuditMethod
+	task.Candidates = pStep.Candidates
 	task.Form = nil
 	task.State = TaskState.UNSTART.Code
 
