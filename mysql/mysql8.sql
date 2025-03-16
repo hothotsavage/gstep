@@ -11,7 +11,7 @@
  Target Server Version : 80012
  File Encoding         : 65001
 
- Date: 13/03/2025 09:54:50
+ Date: 16/03/2025 20:50:26
 */
 
 SET NAMES utf8mb4;
@@ -78,7 +78,7 @@ CREATE TABLE `process`  (
   `deleted_at` datetime(0) NULL DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_id`(`id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 97 CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for task
@@ -89,15 +89,16 @@ CREATE TABLE `task`  (
   `process_id` int(11) NULL DEFAULT NULL,
   `step_id` int(11) NULL DEFAULT NULL,
   `title` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
+  `state` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '状态:unstart,started,pass,refuse,withdraw',
   `category` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
-  `form` varchar(10000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `audit_method` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
-  `state` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '状态:started,pass,refuse,withdraw',
+  `form` varchar(6000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
+  `candidates` varchar(4000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `created_at` datetime(0) NULL DEFAULT NULL,
   `updated_at` datetime(0) NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP(0),
   `deleted_at` datetime(0) NULL DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 169 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for task_assignee
@@ -105,6 +106,8 @@ CREATE TABLE `task`  (
 DROP TABLE IF EXISTS `task_assignee`;
 CREATE TABLE `task_assignee`  (
   `id` int(11) NOT NULL AUTO_INCREMENT,
+  `process_id` int(11) NULL DEFAULT NULL,
+  `step_id` int(11) NULL DEFAULT NULL,
   `task_id` int(11) NULL DEFAULT NULL,
   `user_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `state` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '状态:started,pass,refuse',
@@ -114,7 +117,7 @@ CREATE TABLE `task_assignee`  (
   `updated_at` datetime(0) NULL DEFAULT NULL,
   `deleted_at` datetime(0) NULL DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 226 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for template
@@ -132,13 +135,12 @@ CREATE TABLE `template`  (
   `deleted_at` datetime(0) NULL DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_id`(`id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 65 CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Records of template
 -- ----------------------------
-INSERT INTO `template` VALUES (1, 1, '测试1', 1, '{\"id\":1,\"title\":\"申请a\",\"category\":\"start\",\"form\":null,\"candidates\":null,\"expression\":\"\",\"auditMethod\":\"\",\"branchSteps\":[],\"nextStep\":{\"id\":2,\"title\":\"审核\",\"category\":\"audit\",\"form\":{},\"candidates\":[],\"expression\":\"\",\"auditMethod\":\"or\",\"branchSteps\":[],\"nextStep\":{\"id\":9999,\"title\":\"结束\",\"category\":\"end\",\"form\":null,\"candidates\":null,\"expression\":\"\",\"auditMethod\":\"\",\"branchSteps\":[],\"nextStep\":null}}}', '[]', '2025-03-12 07:02:35', '2025-03-12 09:02:10', NULL);
-INSERT INTO `template` VALUES (63, 2, '', 1, '{\"id\":1,\"title\":\"申请aaa\",\"category\":\"start\",\"form\":null,\"candidates\":[{\"category\":\"user\",\"title\":\"刘备\",\"value\":\"101\"},{\"category\":\"field\",\"title\":\"申请人\",\"value\":\"applicant\"}],\"expression\":\"\",\"auditMethod\":\"\",\"branchSteps\":[],\"nextStep\":{\"id\":2,\"title\":\"审核bb\",\"category\":\"audit\",\"form\":null,\"candidates\":[],\"expression\":\"\",\"auditMethod\":\"and\",\"branchSteps\":[],\"nextStep\":{\"id\":3,\"title\":\"审核cc\",\"category\":\"audit\",\"form\":null,\"candidates\":[],\"expression\":\"\",\"auditMethod\":\"or\",\"branchSteps\":[],\"nextStep\":{\"id\":9999,\"title\":\"结束\",\"category\":\"end\",\"form\":null,\"candidates\":[],\"expression\":\"\",\"auditMethod\":\"\",\"branchSteps\":[],\"nextStep\":null}}}}', '[{\"title\":\"申请人\",\"name\":\"applicant\"},{\"title\":\"审核人\",\"name\":\"auditor\"}]', '2025-03-12 09:02:10', '2025-03-13 09:51:33', NULL);
+INSERT INTO `template` VALUES (63, 2, '测试', 1, '{\"id\":1,\"title\":\"申请\",\"category\":\"start\",\"form\":null,\"candidates\":[{\"category\":\"field\",\"title\":\"申请人\",\"value\":\"applicant\"}],\"expression\":\"\",\"auditMethod\":\"or\",\"branchSteps\":[],\"nextStep\":{\"id\":5,\"title\":\"抄送申请人\",\"category\":\"notify\",\"form\":{},\"candidates\":[{\"category\":\"field\",\"title\":\"申请人\",\"value\":\"applicant\"}],\"expression\":\"\",\"auditMethod\":\"\",\"branchSteps\":[],\"nextStep\":{\"id\":2,\"title\":\"科室、车间/作业区负责人确认内容\",\"category\":\"audit\",\"form\":null,\"candidates\":[{\"category\":\"field\",\"title\":\"科室、车间/作业区负责人\",\"value\":\"workshop_supervisor_id\"}],\"expression\":\"\",\"auditMethod\":\"or\",\"branchSteps\":[],\"nextStep\":{\"id\":6,\"title\":\"抄送科室、车间/作业区负责人\",\"category\":\"notify\",\"form\":{},\"candidates\":[{\"category\":\"field\",\"title\":\"科室、车间/作业区负责人\",\"value\":\"workshop_supervisor_id\"}],\"expression\":\"\",\"auditMethod\":\"\",\"branchSteps\":[],\"nextStep\":{\"id\":3,\"title\":\"科室主任/建造经理/总建造师确认内容\",\"category\":\"audit\",\"form\":null,\"candidates\":[{\"category\":\"field\",\"title\":\"科室主任/建造经理/总建造师\",\"value\":\"constructor_id\"}],\"expression\":\"\",\"auditMethod\":\"or\",\"branchSteps\":[],\"nextStep\":{\"id\":7,\"title\":\"抄送科室主任/建造经理/总建造师\",\"category\":\"notify\",\"form\":{},\"candidates\":[{\"category\":\"field\",\"title\":\"科室主任/建造经理/总建造师\",\"value\":\"constructor_id\"}],\"expression\":\"\",\"auditMethod\":\"\",\"branchSteps\":[],\"nextStep\":{\"id\":4,\"title\":\"安全管理人员确认\",\"category\":\"audit\",\"form\":{},\"candidates\":[{\"category\":\"field\",\"title\":\"安全管理人员\",\"value\":\"safety_manager_id\"}],\"expression\":\"\",\"auditMethod\":\"or\",\"branchSteps\":[],\"nextStep\":{\"id\":8,\"title\":\"抄送安全管理人员\",\"category\":\"notify\",\"form\":{},\"candidates\":[{\"category\":\"field\",\"title\":\"安全管理人员\",\"value\":\"safety_manager_id\"}],\"expression\":\"\",\"auditMethod\":\"\",\"branchSteps\":[],\"nextStep\":{\"id\":9999,\"title\":\"结束\",\"category\":\"end\",\"form\":{},\"candidates\":[],\"expression\":\"\",\"auditMethod\":\"\",\"branchSteps\":[],\"nextStep\":{\"id\":0,\"title\":\"\",\"category\":\"\",\"form\":null,\"candidates\":null,\"expression\":\"\",\"auditMethod\":\"\",\"branchSteps\":null,\"nextStep\":null}}}}}}}}}}', '[{\"title\":\"申请人\",\"name\":\"applicant\"},{\"title\":\"科室、车间/作业区负责人\",\"name\":\"workshop_supervisor_id\"},{\"title\":\"安全管理人员\",\"name\":\"safety_manager_id\"},{\"title\":\"科室主任/建造经理/总建造师\",\"name\":\"constructor_id\"}]', '2025-03-12 09:02:10', '2025-03-16 20:35:25', NULL);
 
 -- ----------------------------
 -- View structure for department
