@@ -98,7 +98,7 @@ func Pass(processPassDto dto.ProcessPassDto, tx *gorm.DB) int {
 	nextStep := startedStep.NextStep
 	if nil != nextStep && nextStep.Id > 0 && nextStep.Category != StepCat.END.Code {
 		//先删除当前步骤之后的所有未开始的任务
-		TaskDao.DeleteNextUnstartTasks(pStartedTask.ProcessId, nextStep.Id, tx)
+		TaskDao.DeleteUnstartTasks(pStartedTask.ProcessId, tx)
 		//创建后续任务
 		TaskService.MakeTasks(pStartedTask.ProcessId, nextStep.Id, processPassDto.Form, tx)
 	}
@@ -137,6 +137,8 @@ func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) int {
 	//保存任务提交人
 	submitIndex := TaskAssigneeDao.GetMaxSubmitIndex(pStartedTask.Id, tx) + 1
 	assignee := entity.TaskAssignee{}
+	assignee.ProcessId = pStartedTask.ProcessId
+	assignee.StepId = pStartedTask.StepId
 	assignee.TaskId = pStartedTask.Id
 	assignee.UserId = processRefuseDto.UserId
 	assignee.State = TaskState.REFUSE.Code
@@ -153,7 +155,7 @@ func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) int {
 	nextStep := startedStep.NextStep
 	if nil != nextStep && nextStep.Id > 0 && nextStep.Category != StepCat.END.Code {
 		//先删除当前步骤之后的所有未开始的任务
-		TaskDao.DeleteNextUnstartTasks(pStartedTask.ProcessId, nextStep.Id, tx)
+		TaskDao.DeleteUnstartTasks(pStartedTask.ProcessId, tx)
 	}
 
 	//创建回退步骤及后续任务

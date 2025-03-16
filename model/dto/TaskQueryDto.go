@@ -2,7 +2,7 @@ package dto
 
 type TaskQueryDto struct {
 	ProcessId   int    `json:"processId"`
-	StartStepId int    `json:"startStepId"`
+	StartTaskId int    `json:"startTaskId"`
 	State       string `json:"state"`
 	Category    string `json:"category"`
 }
