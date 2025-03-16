@@ -4,6 +4,8 @@ import "github.com/hothotsavage/gstep/util/db/entity"
 
 type TaskAssignee struct {
 	entity.BaseEntity
+	ProcessId   int             `json:"processId"`
+	StepId      int             `json:"stepId"`
 	TaskId      int             `json:"taskId"`
 	UserId      string          `json:"userId"`
 	State       string          `json:"state"`

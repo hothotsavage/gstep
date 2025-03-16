@@ -58,6 +58,10 @@ func Query(taskQueryDto dto.TaskQueryDto, tx *gorm.DB) []entity.Task {
 	if strutil.IsNotBlank(taskQueryDto.State) {
 		sql += fmt.Sprintf(" and state='%s' ", taskQueryDto.State)
 	}
+	if strutil.IsNotBlank(taskQueryDto.Category) {
+		sql += fmt.Sprintf(" and category='%s' ", taskQueryDto.Category)
+	}
+	sql += fmt.Sprintf(" order by created_at asc, step_id asc")
 	err := tx.Raw(sql).Scan(&tasks).Error
 	if nil != err {
 		msg := fmt.Sprintf("查询流程(processId=%d)任务失败: %s", taskQueryDto.ProcessId, err)
@@ -74,6 +78,29 @@ func GetStartedTask(processId int, tx *gorm.DB) entity.Task {
 		panic(ServerError.New(msg))
 	}
 	return task
+}
+
+func GetFirstTask(processId int, tx *gorm.DB) entity.Task {
+	var task entity.Task
+	err := tx.Raw("select * from task where process_id=? order by created_at asc,step_id asc limit 1", processId).First(&task).Error
+	if nil != err {
+		msg := fmt.Sprintf("查询第一个任务(processId=%d)失败: %s", processId, err)
+		panic(ServerError.New(msg))
+	}
+	return task
+}
+
+// 查询流程实例的所有任务都已审核结束
+func IsProcessFinish(processId int, tx *gorm.DB) bool {
+	//查询没有未结束的任务，则流程实例结束
+	cnt := 0
+	err := tx.Raw("select count(1) from task "+
+		" where process_id = ? and (state=? or state=?)", processId, TaskState.STARTED.Code, TaskState.UNSTART.Code).Scan(&cnt).Error
+	if nil != err {
+		msg := fmt.Sprintf("查询流程实例的started任务数量失败: %s", err)
+		panic(ServerError.New(msg))
+	}
+	return cnt < 1
 }
 
 // 删除指定步骤之后的未开始任务

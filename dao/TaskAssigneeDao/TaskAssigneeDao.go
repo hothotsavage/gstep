@@ -67,3 +67,15 @@ func GetTasksByLastSubmitIndex(processId int, tx *gorm.DB) []entity.Task {
 
 	return tasks
 }
+
+// 查询第一个启动任务的提交人
+func GetFirstTaskSubmitter(processId int, tx *gorm.DB) string {
+	var userId = ""
+	tx.Raw("select user_id from task_assignee ta, task t "+
+		" where ta.task_id=t.id "+
+		" and t.step_id=1 "+
+		" and t.process_id=? "+
+		" order by ta.created asc "+
+		" limit 1", processId).Scan(&userId)
+	return userId
+}

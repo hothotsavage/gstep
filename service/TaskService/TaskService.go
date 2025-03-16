@@ -2,7 +2,9 @@ package TaskService
 
 import (
 	"fmt"
+	"github.com/gookit/goutil/strutil"
 	"github.com/hothotsavage/gstep/config"
+	"github.com/hothotsavage/gstep/dao/DepartmentDao"
 	"github.com/hothotsavage/gstep/dao/TaskAssigneeDao"
 	"github.com/hothotsavage/gstep/dao/TaskDao"
 	"github.com/hothotsavage/gstep/dao/UserDao"
@@ -119,7 +121,7 @@ func GetNextStep(currentStepId int, pTemplate *entity.Template, form *map[string
 	return nil
 }
 
-func NewTaskByStep(pStep *entity.Step, pProcess *entity.Process, submitIndex int, form *map[string]any, tx *gorm.DB) *entity.Task {
+func NewTaskByStep(pStep *entity.Step, pProcess *entity.Process, tx *gorm.DB) *entity.Task {
 	if nil == pStep {
 		panic(ServerError.New("流程步骤不能为空"))
 	}
@@ -132,51 +134,58 @@ func NewTaskByStep(pStep *entity.Step, pProcess *entity.Process, submitIndex int
 		panic(ServerError.New("无法用结束步骤创建流程任务"))
 	}
 
-	//if len(pStep.Candidates) == 0 {
-	//	panic(ServerError.New("不能用无候选人的流程步骤创建流程任务"))
-	//}
+	task := entity.Task{}
+	task.ProcessId = pProcess.Id
+	task.StepId = pStep.Id
+	task.Title = pStep.Title
+	task.Category = pStep.Category
+	task.AuditMethod = pStep.AuditMethod
+	task.Form = nil
+	task.State = TaskState.UNSTART.Code
 
-	//若没有退回的任务,则创建新任务
-	pTask := TaskDao.QueryTaskByStepId(pStep.Id, pProcess.Id, tx)
-	if nil == pTask {
-		pTask = &entity.Task{}
-		pTask.ProcessId = pProcess.Id
-		pTask.StepId = pStep.Id
-		pTask.Title = pStep.Title
-		pTask.Category = pStep.Category
-		pTask.AuditMethod = pStep.AuditMethod
-		pTask.Form = form
-	}
-	pTask.State = TaskState.UNSTART.Code
-	dao.SaveOrUpdate(pTask, tx)
-
-	//创建任务的候选人
-	if pStep.Category != StepCat.END.Code {
-		for _, c := range pStep.Candidates {
-			if c.Category == CandidateCat.USER.Code {
-				assignee := entity.TaskAssignee{}
-				assignee.TaskId = pTask.Id
-				assignee.UserId = c.Value
-				assignee.State = pTask.State
-				assignee.SubmitIndex = submitIndex
-				assignee.Form = form
-				dao.SaveOrUpdate(&assignee, tx)
-			} else if c.Category == CandidateCat.DEPARTMENT.Code {
-				users := UserDao.GetGrandsonDepartmentUsers(c.Value, tx)
-				for _, user := range users {
-					assignee := entity.TaskAssignee{}
-					assignee.TaskId = pTask.Id
-					assignee.UserId = user.Id
-					assignee.State = pTask.State
-					assignee.SubmitIndex = submitIndex
-					assignee.Form = form
-					dao.SaveOrUpdate(&assignee, tx)
-				}
+	//重新创建启动任务，候选人为第一个启动任务的申请人
+	if pStep.Category == StepCat.START.Code {
+		firstTaskSubmitterUserId := TaskAssigneeDao.GetFirstTaskSubmitter(pProcess.Id, tx)
+		if strutil.IsNotBlank(firstTaskSubmitterUserId) {
+			task.Candidates = []entity.Candidate{
+				{
+					Category: CandidateCat.USER.Code,
+					Title:    "发起人",
+					Value:    firstTaskSubmitterUserId,
+				},
 			}
 		}
 	}
 
-	return pTask
+	dao.SaveOrUpdate(&task, tx)
+
+	////创建任务的候选人
+	//if pStep.Category != StepCat.END.Code {
+	//	for _, c := range pStep.Candidates {
+	//		if c.Category == CandidateCat.USER.Code {
+	//			assignee := entity.TaskAssignee{}
+	//			assignee.TaskId = pTask.Id
+	//			assignee.UserId = c.Value
+	//			assignee.State = pTask.State
+	//			assignee.SubmitIndex = submitIndex
+	//			assignee.Form = form
+	//			dao.SaveOrUpdate(&assignee, tx)
+	//		} else if c.Category == CandidateCat.DEPARTMENT.Code {
+	//			users := UserDao.GetGrandsonDepartmentUsers(c.Value, tx)
+	//			for _, user := range users {
+	//				assignee := entity.TaskAssignee{}
+	//				assignee.TaskId = pTask.Id
+	//				assignee.UserId = user.Id
+	//				assignee.State = pTask.State
+	//				assignee.SubmitIndex = submitIndex
+	//				assignee.Form = form
+	//				dao.SaveOrUpdate(&assignee, tx)
+	//			}
+	//		}
+	//	}
+	//}
+
+	return &task
 }
 
 // 创建启动任务
@@ -188,24 +197,23 @@ func NewStartTask(pProcess *entity.Process, startUserId string, form *map[string
 	pTemplate := dao.CheckById[entity.Template](pProcess.TemplateId, tx)
 	rootStep := pTemplate.RootStep
 
-	//检查流程提交人是否是候选人
-	StepService.CheckCandidate(startUserId, form, &rootStep, task.StepId, tx)
-
 	//创建启动任务
 	task.StepId = rootStep.Id
 	task.Title = rootStep.Title
 	task.Form = form
 	task.Category = rootStep.Category
 	task.State = TaskState.PASS.Code
-	if len(rootStep.AuditMethod) == 0 {
+	task.Candidates = rootStep.Candidates
+	task.AuditMethod = rootStep.AuditMethod
+	if strutil.IsBlank(task.AuditMethod) {
 		task.AuditMethod = AuditMethodCat.OR.Code
-	} else {
-		task.AuditMethod = rootStep.AuditMethod
 	}
 	dao.SaveOrUpdate(&task, tx)
 
 	//创建启动任务的候选人
 	assignee := entity.TaskAssignee{}
+	assignee.ProcessId = pProcess.Id
+	assignee.StepId = task.StepId
 	assignee.TaskId = task.Id
 	assignee.UserId = startUserId
 	assignee.State = TaskState.PASS.Code
@@ -229,7 +237,14 @@ func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB
 	pProcess := dao.CheckById[entity.Process](processId, tx)
 	pTemplate := dao.CheckById[entity.Template](pProcess.TemplateId, tx)
 	pStartStep := StepService.FindStep(&pTemplate.RootStep, startStepId)
-	NewTaskByStep(pStartStep, pProcess, 1, nil, tx)
+	if pStartStep == nil {
+		panic(ServerError.New(fmt.Sprintf("找不到流程步骤(stepId=%s)", startStepId)))
+	}
+	if pStartStep.Category == StepCat.END.Code {
+		return
+	}
+
+	NewTaskByStep(pStartStep, pProcess, tx)
 	//根据form表单，创建开始步骤之后的任务列表
 	stepId := pStartStep.Id
 	for {
@@ -242,15 +257,12 @@ func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB
 			break
 		}
 		//创建下一个步骤的任务
-		NewTaskByStep(pNextStep, pProcess, 1, form, tx)
+		NewTaskByStep(pNextStep, pProcess, tx)
 		stepId = pNextStep.Id
 	}
 
 	//查询指定步骤之后的所有未启动的任务,并更新状态
-	unstartTasks := Query(dto.TaskQueryDto{ProcessId: processId, StartStepId: startStepId, State: TaskState.UNSTART.Code}, tx)
-	if len(unstartTasks) < 1 {
-		FinishPassProcess(pProcess, tx)
-	}
+	unstartTasks := TaskDao.Query(dto.TaskQueryDto{ProcessId: processId, StartStepId: startStepId, State: TaskState.UNSTART.Code}, tx)
 	//更新任务状态
 	for _, unstartTask := range unstartTasks {
 		//抄送任务自动完成
@@ -259,17 +271,19 @@ func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB
 				unstartTask.State = TaskState.PASS.Code
 				dao.SaveOrUpdate(&unstartTask, tx)
 			}
-			//只启动第一个审核任务
+			//只启动第一个审核或开始任务
+		} else if unstartTask.Category == StepCat.START.Code {
+			if unstartTask.State == TaskState.UNSTART.Code {
+				unstartTask.State = TaskState.STARTED.Code
+				dao.SaveOrUpdate(&unstartTask, tx)
+				break
+			}
 		} else if unstartTask.Category == StepCat.AUDIT.Code {
 			if unstartTask.State == TaskState.UNSTART.Code {
 				unstartTask.State = TaskState.STARTED.Code
 				dao.SaveOrUpdate(&unstartTask, tx)
 				break
 			}
-			//	没有抄送、审核任务，结束流程
-		} else if unstartTask.Category == StepCat.END.Code { //结束步骤,结束流程
-			FinishPassProcess(pProcess, tx)
-			break
 		}
 	}
 }
@@ -306,6 +320,36 @@ func FindPrevStep(processId int, targetStepId int, tx *gorm.DB) entity.Step {
 	return *prevStep
 }
 
+// 检查指定步骤的候选人
+func CheckCandidate(userId string, form *map[string]any, taskId int, tx *gorm.DB) {
+	pTask := dao.CheckById[entity.Task](taskId, tx)
+	//没有候选人名单，表示所有人都可提交，直接通过
+	if len(pTask.Candidates) < 1 {
+		return
+	}
+
+	for _, v := range pTask.Candidates {
+		if v.Category == CandidateCat.USER.Code {
+			if userId == v.Value {
+				return
+			}
+		} else if v.Category == CandidateCat.DEPARTMENT.Code {
+			departments := DepartmentDao.GetGrandsonDepartments(v.Value, tx)
+			isIn := UserDao.IsUserInDepartments(userId, departments, tx)
+			if isIn {
+				return
+			}
+		} else if v.Category == CandidateCat.FIELD.Code {
+			formCandidate := (*form)[v.Value]
+			if formCandidate == userId {
+				return
+			}
+		}
+	}
+
+	panic(ServerError.New("流程提交人不在候选人列表中"))
+}
+
 func GetTaskStateChangeVo(processId int, tx *gorm.DB) vo.TaskStateChangeNotifyVo {
 	notifyVo := vo.TaskStateChangeNotifyVo{}
 	pProcess := dao.CheckById[entity.Process](processId, tx)
@@ -326,13 +370,4 @@ func GetTaskStateChangeVo(processId int, tx *gorm.DB) vo.TaskStateChangeNotifyVo
 	notifyVo.Tasks = taskVos
 
 	return notifyVo
-}
-
-// 查询流程实例的任务列表
-func Query(taskQueryDto dto.TaskQueryDto, tx *gorm.DB) []entity.Task {
-	return TaskDao.Query(taskQueryDto, tx)
-}
-
-func GetStartedTask(processId int, tx *gorm.DB) entity.Task {
-	return TaskDao.GetStartedTask(processId, tx)
 }

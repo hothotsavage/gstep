@@ -162,13 +162,11 @@ func FindPrevAuditStepsByEndId(pRootStep *entity.Step, beginStepId int, endStepI
 }
 
 // 检查指定步骤的候选人
-func CheckCandidate(userId string, form *map[string]any, pRootStep *entity.Step, stepId int, tx *gorm.DB) {
-	pStep := FindStep(pRootStep, stepId)
-	if nil == pStep {
-		panic(ServerError.New("找不到流程步骤"))
-	}
+func CheckStepCandidate(userId string, form *map[string]any, templateId int, stepId int, tx *gorm.DB) {
+	pTemplate := dao.CheckById[entity.Template](templateId, tx)
+	pStep := FindStep(&pTemplate.RootStep, stepId)
 	//没有候选人名单，表示所有人都可提交，直接通过
-	if len(pStep.Candidates) == 0 {
+	if len(pStep.Candidates) < 1 {
 		return
 	}
 
