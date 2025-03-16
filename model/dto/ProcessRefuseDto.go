@@ -1,7 +1,7 @@
 package dto
 
-type TaskRefuseDto struct {
-	TaskId     int
+type ProcessRefuseDto struct {
+	ProcessId  int
 	Form       *map[string]any
 	UserId     string
 	PrevStepId int

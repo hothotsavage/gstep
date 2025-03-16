@@ -131,14 +131,13 @@ func setupRoutes() {
 	//启动流程
 	Mux.HandleFunc("/process/start", noAuthMiddleware(ProcessHandler.Start))
 	//任务审核
-	Mux.HandleFunc("/task/pass", noAuthMiddleware(TaskHandler.Pass))
+	Mux.HandleFunc("/process/pass", noAuthMiddleware(ProcessHandler.Pass))
 	//任务回退
-	Mux.HandleFunc("/task/retreat", noAuthMiddleware(TaskHandler.Retreat))
-	//任务终止
-	Mux.HandleFunc("/task/cease", noAuthMiddleware(TaskHandler.Refuse))
+	Mux.HandleFunc("/process/refuse", noAuthMiddleware(ProcessHandler.Refuse))
 
 	//查询我的任务
 	Mux.HandleFunc("/task/pending", noAuthMiddleware(TaskHandler.Pending))
+	Mux.HandleFunc("/task/query", noAuthMiddleware(TaskHandler.Query))
 
 	//+++ 测试接口 ++++++++++++++++++
 	//接收通知

@@ -1,54 +1,211 @@
 package ProcessService
 
 import (
+	"github.com/hothotsavage/gstep/dao/TaskAssigneeDao"
+	"github.com/hothotsavage/gstep/dao/TaskDao"
 	"github.com/hothotsavage/gstep/dao/TemplateDao"
+	"github.com/hothotsavage/gstep/enum/AuditMethodCat"
 	"github.com/hothotsavage/gstep/enum/ProcessState"
 	"github.com/hothotsavage/gstep/enum/StepCat"
+	"github.com/hothotsavage/gstep/enum/TaskState"
 	"github.com/hothotsavage/gstep/model/dto"
 	"github.com/hothotsavage/gstep/model/entity"
+	"github.com/hothotsavage/gstep/model/vo"
+	"github.com/hothotsavage/gstep/service/StepService"
 	"github.com/hothotsavage/gstep/service/TaskService"
+	"github.com/hothotsavage/gstep/util/ExpressionUtil"
 	"github.com/hothotsavage/gstep/util/ServerError"
 	"github.com/hothotsavage/gstep/util/db/dao"
 	"github.com/jinzhu/copier"
 	"gorm.io/gorm"
 )
 
-func Start(dto *dto.ProcessStartDto, tx *gorm.DB) int {
+func Start(processStartDto *dto.ProcessStartDto, tx *gorm.DB) int {
 	process := entity.Process{}
-	copier.Copy(process, dto)
+	copier.Copy(process, processStartDto)
 
 	//创建流程
-	pTemplate := TemplateDao.GetLatestVersionByTemplateId(dto.TemplateId, tx)
+	pTemplate := TemplateDao.GetLatestVersionByTemplateId(processStartDto.TemplateId, tx)
 	if nil == pTemplate {
 		panic(ServerError.New("无效的模板"))
 	}
+
+	//校验提交人在候选人列表中
+	StepService.CheckCandidate(processStartDto.UserId, processStartDto.Form, &pTemplate.RootStep, pTemplate.RootStep.Id, tx)
+
 	process.TemplateId = pTemplate.Id
-	process.StartUserId = dto.StartUserId
+	process.StartUserId = processStartDto.UserId
 	process.State = ProcessState.STARTED.Code
 	dao.SaveOrUpdate(&process, tx)
+	processVO := ToVO(&process, tx)
 
 	//创建启动任务
-	pTask := TaskService.NewStartTask(&process, dto.StartUserId, dto.Form, tx)
-
-	//启动下一步
-	for {
-		pNextStep := TaskService.GetNextStep(pTask.StepId, pTemplate, pTask.Form, tx)
-		if nil == pNextStep || 0 == pNextStep.Id {
-			panic(ServerError.New("找不到流程启动步骤的下一个步骤"))
-		}
-		//创建新任务
-		if pNextStep.Category != StepCat.END.Code {
-			pTask = TaskService.NewTaskByStep(pNextStep, &process, 1, pTask.Form, tx)
-		}
-
-		//审核任务,退出
-		if pNextStep.Category == StepCat.AUDIT.Code {
-			break
-		} else if pNextStep.Category == StepCat.END.Code { //结束步骤,结束流程
-			TaskService.FinishPassProcess(&process, tx)
-			break
-		}
+	TaskService.NewStartTask(&process, processStartDto.UserId, processStartDto.Form, tx)
+	//创建后续的任务列表
+	if nil != processVO.Template.RootStep.NextStep {
+		TaskService.MakeTasks(process.Id, processVO.Template.RootStep.NextStep.Id, processStartDto.Form, tx)
 	}
 
+	//任务状态变更通知
+	TaskService.NotifyTasksStateChange(process.Id, tx)
+
 	return process.Id
+}
+
+// 审核通过
+func Pass(processPassDto dto.ProcessPassDto, tx *gorm.DB) int {
+	//查询已启动的任务
+	startedTask := TaskService.GetStartedTask(processPassDto.ProcessId, tx)
+	//校验taskid
+	pStartedTask := dao.CheckById[entity.Task](startedTask.Id, tx)
+	pProcess := dao.CheckById[entity.Process](pStartedTask.ProcessId, tx)
+	startedStep := GetStep(processPassDto.ProcessId, pStartedTask.StepId, tx)
+
+	if startedStep.Id < 1 {
+		panic(ServerError.New("无效的流程步骤"))
+	}
+	if startedStep.Category == StepCat.END.Code {
+		panic(ServerError.New("结束步骤不用提交"))
+	}
+
+	//检查候选人
+	StepService.CheckCandidate(processPassDto.UserId, processPassDto.Form, &startedStep, startedStep.Id, tx)
+	//检查提交人重复提交
+	TaskAssigneeDao.CheckAssigneeCanSubmit(pStartedTask.Id, processPassDto.UserId, tx)
+
+	//保存任务提交人
+	submitIndex := TaskAssigneeDao.GetMaxSubmitIndex(pStartedTask.Id, tx) + 1
+	assignee := entity.TaskAssignee{}
+	assignee.TaskId = pStartedTask.Id
+	assignee.UserId = processPassDto.UserId
+	assignee.State = TaskState.PASS.Code
+	assignee.Form = processPassDto.Form
+	assignee.SubmitIndex = submitIndex
+	dao.SaveOrUpdate(&assignee, tx)
+
+	//保存任务表单
+	pStartedTask.Form = processPassDto.Form
+	//更新任务状态
+	if CanPass(pStartedTask, pProcess, tx) {
+		pStartedTask.State = TaskState.PASS.Code
+	}
+	dao.SaveOrUpdate(pStartedTask, tx)
+
+	if nil != startedStep.NextStep && startedStep.NextStep.Id > 0 {
+		//先删除当前步骤之后的所有未开始的任务
+		TaskDao.DeleteNextUnstartTasks(pStartedTask.ProcessId, startedStep.NextStep.Id, tx)
+		//创建后续任务
+		TaskService.MakeTasks(pStartedTask.ProcessId, pStartedTask.StepId, processPassDto.Form, tx)
+	}
+
+	//任务状态变更通知
+	TaskService.NotifyTasksStateChange(pProcess.Id, tx)
+
+	return submitIndex
+}
+
+// 拒绝
+func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) int {
+	//查询已启动的任务
+	startedTask := TaskService.GetStartedTask(processRefuseDto.ProcessId, tx)
+	//校验taskid
+	pStartedTask := dao.CheckById[entity.Task](startedTask.Id, tx)
+	pProcess := dao.CheckById[entity.Process](pStartedTask.ProcessId, tx)
+	startedStep := GetStep(processRefuseDto.ProcessId, pStartedTask.StepId, tx)
+
+	if startedStep.Id < 1 {
+		panic(ServerError.New("无效的流程步骤"))
+	}
+	if startedStep.Category == StepCat.END.Code {
+		panic(ServerError.New("结束步骤不用提交"))
+	}
+
+	//检查候选人
+	StepService.CheckCandidate(processRefuseDto.UserId, processRefuseDto.Form, &startedStep, startedStep.Id, tx)
+	//检查提交人重复提交
+	TaskAssigneeDao.CheckAssigneeCanSubmit(pStartedTask.Id, processRefuseDto.UserId, tx)
+
+	//保存任务提交人
+	submitIndex := TaskAssigneeDao.GetMaxSubmitIndex(pStartedTask.Id, tx) + 1
+	assignee := entity.TaskAssignee{}
+	assignee.TaskId = pStartedTask.Id
+	assignee.UserId = processRefuseDto.UserId
+	assignee.State = TaskState.REFUSE.Code
+	assignee.Form = processRefuseDto.Form
+	assignee.SubmitIndex = submitIndex
+	dao.SaveOrUpdate(&assignee, tx)
+
+	//保存任务表单
+	pStartedTask.Form = processRefuseDto.Form
+	//更新任务状态
+	pStartedTask.State = TaskState.REFUSE.Code
+	dao.SaveOrUpdate(pStartedTask, tx)
+
+	if nil != startedStep.NextStep && startedStep.NextStep.Id > 0 {
+		//先删除当前步骤之后的所有未开始的任务
+		TaskDao.DeleteNextUnstartTasks(pStartedTask.ProcessId, startedStep.NextStep.Id, tx)
+		//创建后续任务
+		TaskService.MakeTasks(pStartedTask.ProcessId, pStartedTask.StepId, processRefuseDto.Form, tx)
+	}
+
+	//任务状态变更通知
+	TaskService.NotifyTasksStateChange(pProcess.Id, tx)
+
+	return submitIndex
+}
+
+func ToVO(pProcess *entity.Process, tx *gorm.DB) vo.ProcessVo {
+	aVo := vo.ProcessVo{}
+	if nil == pProcess {
+		return aVo
+	}
+
+	aVo.Process = *pProcess
+	template := dao.CheckById[entity.Template](pProcess.TemplateId, tx)
+	aVo.Template = *template
+
+	return aVo
+}
+
+func GetStep(processId int, stepId int, tx *gorm.DB) entity.Step {
+	pPrcess := dao.CheckById[entity.Process](processId, tx)
+	processVO := ToVO(pPrcess, tx)
+	pStep := StepService.FindStep(&processVO.Template.RootStep, stepId)
+
+	if nil == pStep {
+		panic(ServerError.New("无效的步骤id"))
+	}
+
+	return *pStep
+}
+
+func GetNextStep(processId int, startStepId int, tx *gorm.DB) entity.Step {
+	pPrcess := dao.CheckById[entity.Process](processId, tx)
+	processVO := ToVO(pPrcess, tx)
+	pStep := StepService.FindStep(&processVO.Template.RootStep, startStepId)
+	if nil == pStep {
+		panic(ServerError.New("无效的步骤id"))
+	}
+
+	return *pStep.NextStep
+}
+
+// 判断是否可通过
+func CanPass(pTask *entity.Task, pProcess *entity.Process, tx *gorm.DB) bool {
+	if pTask.Category == StepCat.CONDITION.Code {
+		pStep := GetStep(pProcess.Id, pTask.StepId, tx)
+		exp := ExpressionUtil.Template2jsExpression(pStep.Expression, pTask.Form)
+		isPass := ExpressionUtil.RunJsExpression(exp)
+		return isPass
+	} else {
+		passCount := TaskAssigneeDao.PassCount(pTask.Id, tx)
+
+		//或签
+		if pTask.AuditMethod == AuditMethodCat.OR.Code {
+			return passCount > 0
+		} else { //会签
+			candidateCount := StepService.CandidateCount(pTask.Id, tx)
+			return passCount >= candidateCount
+		}
+	}
 }

@@ -13,13 +13,13 @@ import (
 )
 
 func Start(writer http.ResponseWriter, request *http.Request) {
-	requestDto := dto.ProcessStartDto{}
-	RequestParsUtil.Body2dto(request, &requestDto)
+	processStartDto := dto.ProcessStartDto{}
+	RequestParsUtil.Body2dto(request, &processStartDto)
 
 	tx := DbUtil.GetTx()
-	dao.CheckById[entity.User](requestDto.StartUserId, tx)
+	dao.CheckById[entity.User](processStartDto.UserId, tx)
 	//创建流程及启动任务
-	id := ProcessService.Start(&requestDto, tx)
+	id := ProcessService.Start(&processStartDto, tx)
 
 	//任务状态变更通知
 	TaskService.NotifyTasksStateChange(id, tx)
@@ -27,4 +27,33 @@ func Start(writer http.ResponseWriter, request *http.Request) {
 	tx.Commit()
 
 	AjaxJson.SuccessByData(id).Response(writer)
+}
+
+func Pass(writer http.ResponseWriter, request *http.Request) {
+	processPassDto := dto.ProcessPassDto{}
+	RequestParsUtil.Body2dto(request, &processPassDto)
+
+	tx := DbUtil.GetTx()
+	dao.CheckById[entity.User](processPassDto.UserId, tx)
+	//审核通过
+	ProcessService.Pass(processPassDto, tx)
+
+	tx.Commit()
+
+	AjaxJson.Success().Response(writer)
+}
+
+// 退回到指定上一步
+func Refuse(writer http.ResponseWriter, request *http.Request) {
+	processRefuseDto := dto.ProcessRefuseDto{}
+	RequestParsUtil.Body2dto(request, &processRefuseDto)
+
+	tx := DbUtil.GetTx()
+	dao.CheckById[entity.User](processRefuseDto.UserId, tx)
+	//拒绝
+	ProcessService.Refuse(processRefuseDto, tx)
+
+	tx.Commit()
+
+	AjaxJson.Success().Response(writer)
 }

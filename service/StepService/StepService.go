@@ -2,7 +2,6 @@ package StepService
 
 import (
 	"github.com/hothotsavage/gstep/dao/DepartmentDao"
-	"github.com/hothotsavage/gstep/dao/ProcessDao"
 	"github.com/hothotsavage/gstep/dao/UserDao"
 	"github.com/hothotsavage/gstep/enum/CandidateCat"
 	"github.com/hothotsavage/gstep/enum/StepCat"
@@ -11,17 +10,6 @@ import (
 	"github.com/hothotsavage/gstep/util/db/dao"
 	"gorm.io/gorm"
 )
-
-func GetStepByProcess(pPrcess *entity.Process, stepId int, tx *gorm.DB) *entity.Step {
-	processVo := ProcessDao.ToVo(pPrcess, tx)
-	pStep := FindStep(&processVo.Template.RootStep, stepId)
-
-	if nil == pStep {
-		panic(ServerError.New("无效的步骤id"))
-	}
-
-	return pStep
-}
 
 func GetStepByTemplateId(templateId int, stepId int, tx *gorm.DB) *entity.Step {
 	template := dao.CheckById[entity.Template](templateId, tx)
@@ -66,30 +54,33 @@ func FindStep(pParentStep *entity.Step, stepId int) *entity.Step {
 	return nil
 }
 
-func FindPrevStep(pParentStep *entity.Step, beginStepId int) *entity.Step {
+// 递归查找指定步骤的前一个步骤
+// pParentStep 父步骤
+// targetStepId 查询的步骤id
+func FindPrevStep(pParentStep *entity.Step, targetStepId int) *entity.Step {
 	if nil == pParentStep {
 		return nil
 	}
 
-	if nil != pParentStep.NextStep && pParentStep.NextStep.Id == beginStepId {
+	if nil != pParentStep.NextStep && pParentStep.NextStep.Id == targetStepId {
 		return pParentStep
 	}
 
 	for _, v := range pParentStep.BranchSteps {
-		if v.Id == beginStepId {
+		if v.Id == targetStepId {
 			return pParentStep
 		}
 	}
 
 	if nil != pParentStep.NextStep {
-		pNextStep := FindPrevStep(pParentStep.NextStep, beginStepId)
+		pNextStep := FindPrevStep(pParentStep.NextStep, targetStepId)
 		if nil != pNextStep {
 			return pNextStep
 		}
 	}
 
 	for _, v := range pParentStep.BranchSteps {
-		pFindOne := FindPrevStep(v, beginStepId)
+		pFindOne := FindPrevStep(v, targetStepId)
 		if nil != pFindOne {
 			return pFindOne
 		}
@@ -98,8 +89,9 @@ func FindPrevStep(pParentStep *entity.Step, beginStepId int) *entity.Step {
 	return nil
 }
 
-func FindPrevBranchStepWithNextStep(pRootStep *entity.Step, beginStepId int) *entity.Step {
-	pPrevStep := FindPrevStep(pRootStep, beginStepId)
+// 递归查找前一个分支步骤
+func FindPrevBranchStepWithNextStep(pRootStep *entity.Step, targetStepId int) *entity.Step {
+	pPrevStep := FindPrevStep(pRootStep, targetStepId)
 
 	if nil == pPrevStep {
 		return nil
@@ -175,6 +167,7 @@ func CheckCandidate(userId string, form *map[string]any, pRootStep *entity.Step,
 	if nil == pStep {
 		panic(ServerError.New("找不到流程步骤"))
 	}
+	//没有候选人名单，表示所有人都可提交，直接通过
 	if len(pStep.Candidates) == 0 {
 		return
 	}

@@ -6,12 +6,15 @@ type TaskState struct {
 	enum.BaseEnum[string]
 }
 
+var UNSTART = TaskState{}
 var STARTED = TaskState{}
 var PASS = TaskState{}
 var REFUSE = TaskState{}
-var RETREAT = TaskState{}
 
 func init() {
+	UNSTART.Code = "unstart"
+	UNSTART.Title = "未开始"
+
 	STARTED.Code = "started"
 	STARTED.Title = "开始"
 
@@ -21,6 +24,4 @@ func init() {
 	REFUSE.Code = "refuse"
 	REFUSE.Title = "拒绝"
 
-	RETREAT.Code = "retreat"
-	RETREAT.Title = "退回"
 }
