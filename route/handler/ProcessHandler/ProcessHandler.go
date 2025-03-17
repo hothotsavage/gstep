@@ -4,7 +4,6 @@ import (
 	"github.com/hothotsavage/gstep/model/dto"
 	"github.com/hothotsavage/gstep/model/entity"
 	"github.com/hothotsavage/gstep/service/ProcessService"
-	"github.com/hothotsavage/gstep/service/TaskService"
 	"github.com/hothotsavage/gstep/util/db/DbUtil"
 	"github.com/hothotsavage/gstep/util/db/dao"
 	"github.com/hothotsavage/gstep/util/net/AjaxJson"
@@ -19,14 +18,14 @@ func Start(writer http.ResponseWriter, request *http.Request) {
 	tx := DbUtil.GetTx()
 	dao.CheckById[entity.User](processStartDto.UserId, tx)
 	//创建流程及启动任务
-	id := ProcessService.Start(&processStartDto, tx)
+	vo := ProcessService.Start(&processStartDto, tx)
 
 	//任务状态变更通知
-	TaskService.NotifyTasksStateChange(id, tx)
+	//TaskService.NotifyTasksStateChange(id, tx)
 
 	tx.Commit()
 
-	AjaxJson.SuccessByData(id).Response(writer)
+	AjaxJson.SuccessByData(vo).Response(writer)
 }
 
 func Pass(writer http.ResponseWriter, request *http.Request) {
@@ -36,11 +35,11 @@ func Pass(writer http.ResponseWriter, request *http.Request) {
 	tx := DbUtil.GetTx()
 	dao.CheckById[entity.User](processPassDto.UserId, tx)
 	//审核通过
-	ProcessService.Pass(processPassDto, tx)
+	vo := ProcessService.Pass(processPassDto, tx)
 
 	tx.Commit()
 
-	AjaxJson.Success().Response(writer)
+	AjaxJson.SuccessByData(vo).Response(writer)
 }
 
 // 退回到指定上一步
@@ -51,9 +50,9 @@ func Refuse(writer http.ResponseWriter, request *http.Request) {
 	tx := DbUtil.GetTx()
 	dao.CheckById[entity.User](processRefuseDto.UserId, tx)
 	//拒绝
-	ProcessService.Refuse(processRefuseDto, tx)
+	vo := ProcessService.Refuse(processRefuseDto, tx)
 
 	tx.Commit()
 
-	AjaxJson.Success().Response(writer)
+	AjaxJson.SuccessByData(vo).Response(writer)
 }

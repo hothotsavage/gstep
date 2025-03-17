@@ -1,0 +1,24 @@
+{
+  "port": 8216,
+  "db":{
+    "database": "gstep",
+    "host": "10.192.1.4",
+    "port": "3306",
+    "user": "wsqw",
+    "password": "IOm7mOiupOivgeS5puS8muWcqG15c3Fs55qEZGF0YeebruW9leS4iyAyLuaOiOadgyBkYXRh55uu5b2V5LiL57uZ55Sf5oiQ55qE56eY6ZKl5paH5Lu25o6I5p2DIGNob3duLVJteXNx"
+  },
+  "notify": {
+    "taskStateChange": "http://localhost:9900/notify/task_state_change"
+  },
+  "department": {
+    "rootParentDepartmentId": "1"
+  },
+  "nacos": {
+    "host": "10.192.1.4",
+    "port": 8848,
+    "namespace": "release",
+    "serviceName": "server-gstep",
+    "servicePort": 8216,
+    "serviceIP": "10.192.1.4"
+  }
+}

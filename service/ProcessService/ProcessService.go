@@ -20,7 +20,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func Start(processStartDto *dto.ProcessStartDto, tx *gorm.DB) int {
+func Start(processStartDto *dto.ProcessStartDto, tx *gorm.DB) vo.NotifyVO {
 	process := entity.Process{}
 	copier.Copy(process, processStartDto)
 
@@ -40,22 +40,28 @@ func Start(processStartDto *dto.ProcessStartDto, tx *gorm.DB) int {
 	processVO := ToVO(&process, tx)
 
 	//创建启动任务
-	TaskService.NewStartTask(&process, processStartDto.UserId, processStartDto.Form, tx)
+	startTask := TaskService.NewStartTask(&process, processStartDto.UserId, processStartDto.Form, processStartDto.Memo, tx)
 
+	notifyUserIds := []string{}
 	//创建后续的任务列表
 	nextStep := processVO.Template.RootStep.NextStep
 	if nil != nextStep && nextStep.Category != StepCat.END.Code {
-		TaskService.MakeTasks(process.Id, nextStep.Id, processStartDto.Form, tx)
+		notifyUserIds = TaskService.MakeTasks(process.Id, nextStep.Id, processStartDto.Form, tx)
 	}
 
 	//任务状态变更通知
-	TaskService.NotifyTasksStateChange(process.Id, tx)
+	//TaskService.NotifyTasksStateChange(process.Id, tx)
 
-	return process.Id
+	notifyVO := vo.NotifyVO{
+		process.Id,
+		startTask.Id,
+		notifyUserIds,
+	}
+	return notifyVO
 }
 
 // 审核通过
-func Pass(processPassDto dto.ProcessPassDto, tx *gorm.DB) int {
+func Pass(processPassDto dto.ProcessPassDto, tx *gorm.DB) vo.NotifyVO {
 	//查询已启动的任务
 	startedTask := TaskDao.GetStartedTask(processPassDto.ProcessId, tx)
 	//校验taskid
@@ -70,6 +76,9 @@ func Pass(processPassDto dto.ProcessPassDto, tx *gorm.DB) int {
 		panic(ServerError.New("结束步骤不用提交"))
 	}
 
+	//更新任务候选人
+	pStartedTask.Candidates = TaskService.MakeCandidates(startedStep, processPassDto.Form, tx)
+	dao.SaveOrUpdate(pStartedTask, tx)
 	//检查候选人
 	TaskService.CheckCandidate(processPassDto.UserId, processPassDto.Form, pStartedTask.Id, tx)
 	//检查提交人重复提交
@@ -85,6 +94,7 @@ func Pass(processPassDto dto.ProcessPassDto, tx *gorm.DB) int {
 	assignee.State = TaskState.PASS.Code
 	assignee.Form = processPassDto.Form
 	assignee.SubmitIndex = submitIndex
+	assignee.Memo = processPassDto.Memo
 	dao.SaveOrUpdate(&assignee, tx)
 
 	//保存任务表单
@@ -95,30 +105,37 @@ func Pass(processPassDto dto.ProcessPassDto, tx *gorm.DB) int {
 	}
 	dao.SaveOrUpdate(pStartedTask, tx)
 
+	notifyUserIds := []string{}
+	//创建后续的任务列表
 	nextStep := startedStep.NextStep
 	if nil != nextStep && nextStep.Id > 0 && nextStep.Category != StepCat.END.Code {
 		//先删除当前步骤之后的所有未开始的任务
 		TaskDao.DeleteUnstartTasks(pStartedTask.ProcessId, tx)
 		//创建后续任务
-		TaskService.MakeTasks(pStartedTask.ProcessId, nextStep.Id, processPassDto.Form, tx)
+		notifyUserIds = TaskService.MakeTasks(pStartedTask.ProcessId, nextStep.Id, processPassDto.Form, tx)
 	}
 
 	//更新流程实例状态
 	UpdateProcessState(processPassDto.ProcessId, tx)
 
 	//任务状态变更通知
-	TaskService.NotifyTasksStateChange(pProcess.Id, tx)
+	//TaskService.NotifyTasksStateChange(pProcess.Id, tx)
 
-	return submitIndex
+	notifyVO := vo.NotifyVO{
+		pProcess.Id,
+		pStartedTask.Id,
+		notifyUserIds,
+	}
+	return notifyVO
 }
 
 // 拒绝
-func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) int {
+func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) vo.NotifyVO {
 	//查询已启动的任务
 	startedTask := TaskDao.GetStartedTask(processRefuseDto.ProcessId, tx)
 	//校验taskid
 	pStartedTask := dao.CheckById[entity.Task](startedTask.Id, tx)
-	pProcess := dao.CheckById[entity.Process](pStartedTask.ProcessId, tx)
+	dao.CheckById[entity.Process](pStartedTask.ProcessId, tx)
 	startedStep := GetStep(processRefuseDto.ProcessId, pStartedTask.StepId, tx)
 	GetNextStep(processRefuseDto.ProcessId, processRefuseDto.PrevStepId, tx)
 
@@ -129,6 +146,9 @@ func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) int {
 		panic(ServerError.New("结束步骤不用提交"))
 	}
 
+	//更新任务候选人
+	pStartedTask.Candidates = TaskService.MakeCandidates(startedStep, processRefuseDto.Form, tx)
+	dao.SaveOrUpdate(pStartedTask, tx)
 	//检查候选人
 	TaskService.CheckCandidate(processRefuseDto.UserId, processRefuseDto.Form, pStartedTask.Id, tx)
 	//检查提交人重复提交
@@ -144,6 +164,7 @@ func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) int {
 	assignee.Form = processRefuseDto.Form
 	assignee.SubmitIndex = submitIndex
 	assignee.UserId = processRefuseDto.UserId
+	assignee.Memo = processRefuseDto.Memo
 	dao.SaveOrUpdate(&assignee, tx)
 
 	//保存任务表单
@@ -152,6 +173,8 @@ func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) int {
 	pStartedTask.State = TaskState.REFUSE.Code
 	dao.SaveOrUpdate(pStartedTask, tx)
 
+	notifyUserIds := []string{}
+	//创建后续的任务列表
 	nextStep := startedStep.NextStep
 	if nil != nextStep && nextStep.Id > 0 && nextStep.Category != StepCat.END.Code {
 		//先删除当前步骤之后的所有未开始的任务
@@ -159,15 +182,20 @@ func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) int {
 	}
 
 	//创建回退步骤及后续任务
-	TaskService.MakeTasks(pStartedTask.ProcessId, processRefuseDto.PrevStepId, processRefuseDto.Form, tx)
+	notifyUserIds = TaskService.MakeTasks(pStartedTask.ProcessId, processRefuseDto.PrevStepId, processRefuseDto.Form, tx)
 
 	//更新流程实例状态
 	UpdateProcessState(processRefuseDto.ProcessId, tx)
 
 	//任务状态变更通知
-	TaskService.NotifyTasksStateChange(pProcess.Id, tx)
+	//TaskService.NotifyTasksStateChange(pProcess.Id, tx)
 
-	return submitIndex
+	notifyVO := vo.NotifyVO{
+		processRefuseDto.ProcessId,
+		pStartedTask.Id,
+		notifyUserIds,
+	}
+	return notifyVO
 }
 
 func ToVO(pProcess *entity.Process, tx *gorm.DB) vo.ProcessVo {

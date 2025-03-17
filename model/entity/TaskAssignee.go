@@ -11,6 +11,7 @@ type TaskAssignee struct {
 	State       string          `json:"state"`
 	SubmitIndex int             `json:"submitIndex"`
 	Form        *map[string]any `json:"form" gorm:"serializer:json"`
+	Memo        string          `json:"memo"`
 }
 
 func (e TaskAssignee) TableName() string {

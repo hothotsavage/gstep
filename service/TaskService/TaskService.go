@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/gookit/goutil/strutil"
 	"github.com/hothotsavage/gstep/config"
-	"github.com/hothotsavage/gstep/dao/DepartmentDao"
 	"github.com/hothotsavage/gstep/dao/TaskAssigneeDao"
 	"github.com/hothotsavage/gstep/dao/TaskDao"
 	"github.com/hothotsavage/gstep/dao/UserDao"
@@ -121,7 +120,7 @@ func GetNextStep(currentStepId int, pTemplate *entity.Template, form *map[string
 	return nil
 }
 
-func NewTaskByStep(pStep *entity.Step, pProcess *entity.Process, tx *gorm.DB) *entity.Task {
+func NewTaskByStep(pStep *entity.Step, pProcess *entity.Process, form *map[string]any, tx *gorm.DB) *entity.Task {
 	if nil == pStep {
 		panic(ServerError.New("流程步骤不能为空"))
 	}
@@ -140,21 +139,15 @@ func NewTaskByStep(pStep *entity.Step, pProcess *entity.Process, tx *gorm.DB) *e
 	task.Title = pStep.Title
 	task.Category = pStep.Category
 	task.AuditMethod = pStep.AuditMethod
-	task.Candidates = pStep.Candidates
 	task.Form = nil
 	task.State = TaskState.UNSTART.Code
+	task.Candidates = MakeCandidates(*pStep, form, tx)
 
 	//重新创建启动任务，候选人为第一个启动任务的申请人
 	if pStep.Category == StepCat.START.Code {
 		firstTaskSubmitterUserId := TaskAssigneeDao.GetFirstTaskSubmitter(pProcess.Id, tx)
 		if strutil.IsNotBlank(firstTaskSubmitterUserId) {
-			task.Candidates = []entity.Candidate{
-				{
-					Category: CandidateCat.USER.Code,
-					Title:    "申请人",
-					Value:    firstTaskSubmitterUserId,
-				},
-			}
+			task.Candidates = []string{firstTaskSubmitterUserId}
 		}
 	}
 
@@ -163,7 +156,7 @@ func NewTaskByStep(pStep *entity.Step, pProcess *entity.Process, tx *gorm.DB) *e
 }
 
 // 创建启动任务
-func NewStartTask(pProcess *entity.Process, startUserId string, form *map[string]any, tx *gorm.DB) *entity.Task {
+func NewStartTask(pProcess *entity.Process, startUserId string, form *map[string]any, memo string, tx *gorm.DB) *entity.Task {
 	//创建启动任务
 	task := entity.Task{}
 	task.ProcessId = pProcess.Id
@@ -177,7 +170,7 @@ func NewStartTask(pProcess *entity.Process, startUserId string, form *map[string
 	task.Form = form
 	task.Category = rootStep.Category
 	task.State = TaskState.PASS.Code
-	task.Candidates = rootStep.Candidates
+	task.Candidates = MakeCandidates(rootStep, form, tx)
 	task.AuditMethod = rootStep.AuditMethod
 	if strutil.IsBlank(task.AuditMethod) {
 		task.AuditMethod = AuditMethodCat.OR.Code
@@ -193,6 +186,7 @@ func NewStartTask(pProcess *entity.Process, startUserId string, form *map[string
 	assignee.State = TaskState.PASS.Code
 	assignee.SubmitIndex = 1
 	assignee.Form = form
+	assignee.Memo = memo
 	dao.SaveOrUpdate(&assignee, tx)
 
 	return &task
@@ -207,7 +201,7 @@ func FinishPassProcess(pProcess *entity.Process, tx *gorm.DB) {
 }
 
 // 创建指定步骤之后的所有任务列表
-func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB) {
+func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB) []string {
 	pProcess := dao.CheckById[entity.Process](processId, tx)
 	pTemplate := dao.CheckById[entity.Template](pProcess.TemplateId, tx)
 	pStartStep := StepService.FindStep(&pTemplate.RootStep, startStepId)
@@ -215,11 +209,11 @@ func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB
 		panic(ServerError.New(fmt.Sprintf("找不到流程步骤(stepId=%s)", startStepId)))
 	}
 	if pStartStep.Category == StepCat.END.Code {
-		return
+		return []string{}
 	}
 
 	//创建第一个步骤的任务实例
-	pStartTask := NewTaskByStep(pStartStep, pProcess, tx)
+	pStartTask := NewTaskByStep(pStartStep, pProcess, form, tx)
 	//根据form表单，创建开始步骤之后的任务列表
 	stepId := pStartStep.Id
 	for {
@@ -232,12 +226,13 @@ func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB
 			break
 		}
 		//创建下一个步骤的任务实例
-		NewTaskByStep(pNextStep, pProcess, tx)
+		NewTaskByStep(pNextStep, pProcess, form, tx)
 		stepId = pNextStep.Id
 	}
 
 	//查询指定任务之后的所有未启动的任务,并更新状态
 	unstartTasks := TaskDao.Query(dto.TaskQueryDto{ProcessId: processId, StartTaskId: pStartTask.Id, State: TaskState.UNSTART.Code}, tx)
+	notifyUserIds := []string{}
 	//更新任务状态
 	for _, unstartTask := range unstartTasks {
 		//抄送任务自动完成
@@ -245,6 +240,7 @@ func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB
 			if unstartTask.State != TaskState.PASS.Code {
 				unstartTask.State = TaskState.PASS.Code
 				dao.SaveOrUpdate(&unstartTask, tx)
+				notifyUserIds = append(notifyUserIds, unstartTask.Candidates...)
 				//创建抄送人列表
 				MakeAssignees(unstartTask, form, tx)
 			}
@@ -253,6 +249,7 @@ func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB
 			if unstartTask.State == TaskState.UNSTART.Code {
 				unstartTask.State = TaskState.STARTED.Code
 				dao.SaveOrUpdate(&unstartTask, tx)
+				notifyUserIds = append(notifyUserIds, unstartTask.Candidates...)
 				break
 			}
 		} else if unstartTask.Category == StepCat.AUDIT.Code {
@@ -263,6 +260,8 @@ func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB
 			}
 		}
 	}
+
+	return notifyUserIds
 }
 
 // 调用流程任务状态变更通知回调接口
@@ -298,70 +297,116 @@ func CheckCandidate(userId string, form *map[string]any, taskId int, tx *gorm.DB
 		return
 	}
 
-	for _, v := range pTask.Candidates {
-		if v.Category == CandidateCat.USER.Code {
-			if userId == v.Value {
-				return
-			}
-		} else if v.Category == CandidateCat.DEPARTMENT.Code {
-			departments := DepartmentDao.GetGrandsonDepartments(v.Value, tx)
-			isIn := UserDao.IsUserInDepartments(userId, departments, tx)
-			if isIn {
-				return
-			}
-		} else if v.Category == CandidateCat.FIELD.Code {
-			formCandidate := (*form)[v.Value]
-			if formCandidate == userId {
-				return
-			}
+	for _, candidate := range pTask.Candidates {
+		if userId == candidate {
+			return
 		}
 	}
 
+	//for _, v := range pTask.Candidates {
+	//	if v.Category == CandidateCat.USER.Code {
+	//		if userId == v.Value {
+	//			return
+	//		}
+	//	} else if v.Category == CandidateCat.DEPARTMENT.Code {
+	//		departments := DepartmentDao.GetGrandsonDepartments(v.Value, tx)
+	//		isIn := UserDao.IsUserInDepartments(userId, departments, tx)
+	//		if isIn {
+	//			return
+	//		}
+	//	} else if v.Category == CandidateCat.FIELD.Code {
+	//		formCandidate := (*form)[v.Value]
+	//		if formCandidate == userId {
+	//			return
+	//		}
+	//	}
+	//}
+
 	panic(ServerError.New("流程提交人不在候选人列表中"))
+}
+
+// 创建任务的候选人列表
+func MakeCandidates(step entity.Step, form *map[string]any, tx *gorm.DB) []string {
+	userIds := []string{}
+	for _, c := range step.Candidates {
+		if c.Category == CandidateCat.USER.Code {
+			if strutil.IsNotBlank(c.Value) {
+				userIds = append(userIds, c.Value)
+			}
+		} else if c.Category == CandidateCat.FIELD.Code {
+			userId := (*form)[c.Value]
+			if strutil.IsNotBlank(userId.(string)) {
+				userIds = append(userIds, userId.(string))
+			}
+		} else if c.Category == CandidateCat.DEPARTMENT.Code {
+			users := UserDao.GetGrandsonDepartmentUsers(c.Value, tx)
+			for _, user := range users {
+				if strutil.IsNotBlank(user.Id) {
+					userIds = append(userIds, user.Id)
+				}
+			}
+		}
+	}
+	return userIds
 }
 
 // 创建任务的执行人实例
 func MakeAssignees(task entity.Task, form *map[string]any, tx *gorm.DB) {
 	//记录提交人的排序序号
 	submitIndex := 1
-	for _, c := range task.Candidates {
-		if c.Category == CandidateCat.USER.Code {
-			assignee := entity.TaskAssignee{}
-			assignee.ProcessId = task.ProcessId
-			assignee.StepId = task.StepId
-			assignee.TaskId = task.Id
-			assignee.State = task.State
-			assignee.SubmitIndex = submitIndex
-			assignee.Form = form
-			assignee.UserId = c.Value
-			dao.SaveOrUpdate(&assignee, tx)
-		} else if c.Category == CandidateCat.FIELD.Code {
-			assignee := entity.TaskAssignee{}
-			assignee.ProcessId = task.ProcessId
-			assignee.StepId = task.StepId
-			assignee.TaskId = task.Id
-			assignee.State = task.State
-			assignee.SubmitIndex = submitIndex
-			assignee.Form = form
-			userId := (*form)[c.Value]
-			assignee.UserId = userId.(string)
-			dao.SaveOrUpdate(&assignee, tx)
-		} else if c.Category == CandidateCat.DEPARTMENT.Code {
-			users := UserDao.GetGrandsonDepartmentUsers(c.Value, tx)
-			for _, user := range users {
-				assignee := entity.TaskAssignee{}
-				assignee.ProcessId = task.ProcessId
-				assignee.StepId = task.StepId
-				assignee.TaskId = task.Id
-				assignee.State = task.State
-				assignee.SubmitIndex = submitIndex
-				assignee.Form = form
-				assignee.UserId = user.Id
-				dao.SaveOrUpdate(&assignee, tx)
-			}
-		}
+	for _, userId := range task.Candidates {
+		assignee := entity.TaskAssignee{}
+		assignee.ProcessId = task.ProcessId
+		assignee.StepId = task.StepId
+		assignee.TaskId = task.Id
+		assignee.State = task.State
+		assignee.SubmitIndex = submitIndex
+		assignee.Form = form
+		assignee.UserId = userId
+		dao.SaveOrUpdate(&assignee, tx)
 		submitIndex++
 	}
+
+	////记录提交人的排序序号
+	//submitIndex := 1
+	//for _, c := range task.Candidates {
+	//	if c.Category == CandidateCat.USER.Code {
+	//		assignee := entity.TaskAssignee{}
+	//		assignee.ProcessId = task.ProcessId
+	//		assignee.StepId = task.StepId
+	//		assignee.TaskId = task.Id
+	//		assignee.State = task.State
+	//		assignee.SubmitIndex = submitIndex
+	//		assignee.Form = form
+	//		assignee.UserId = c.Value
+	//		dao.SaveOrUpdate(&assignee, tx)
+	//	} else if c.Category == CandidateCat.FIELD.Code {
+	//		assignee := entity.TaskAssignee{}
+	//		assignee.ProcessId = task.ProcessId
+	//		assignee.StepId = task.StepId
+	//		assignee.TaskId = task.Id
+	//		assignee.State = task.State
+	//		assignee.SubmitIndex = submitIndex
+	//		assignee.Form = form
+	//		userId := (*form)[c.Value]
+	//		assignee.UserId = userId.(string)
+	//		dao.SaveOrUpdate(&assignee, tx)
+	//	} else if c.Category == CandidateCat.DEPARTMENT.Code {
+	//		users := UserDao.GetGrandsonDepartmentUsers(c.Value, tx)
+	//		for _, user := range users {
+	//			assignee := entity.TaskAssignee{}
+	//			assignee.ProcessId = task.ProcessId
+	//			assignee.StepId = task.StepId
+	//			assignee.TaskId = task.Id
+	//			assignee.State = task.State
+	//			assignee.SubmitIndex = submitIndex
+	//			assignee.Form = form
+	//			assignee.UserId = user.Id
+	//			dao.SaveOrUpdate(&assignee, tx)
+	//		}
+	//	}
+	//	submitIndex++
+	//}
 }
 
 func GetTaskStateChangeVo(processId int, tx *gorm.DB) vo.TaskStateChangeNotifyVo {

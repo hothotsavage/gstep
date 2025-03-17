@@ -8,7 +8,7 @@ import (
 )
 
 type Configuration struct {
-	Port string
+	Port uint64
 	Auth struct {
 		Secret string
 	}
@@ -25,6 +25,13 @@ type Configuration struct {
 	Department struct {
 		RootParentDepartmentId string
 	}
+	Nacos struct {
+		Host        string
+		Port        uint64
+		Namespace   string
+		ServiceIP   string
+		ServiceName string
+	}
 }
 
 // 全局配置
@@ -32,7 +39,9 @@ var Config = &Configuration{}
 
 func Setup() {
 	//将配置文件:config.json中的配置读取到Config
-	file, err := os.Open("config.json")
+	//---debug---------------------------------------
+	//file, err := os.Open("config_debug.json")
+	file, err := os.Open("./config_release.json")
 	if err != nil {
 		log.Printf("cannot open file config.LogUtil: %v", err)
 		panic(err)

@@ -1,0 +1,24 @@
+{
+  "port": 8216,
+  "db":{
+    "database": "gstep",
+    "host": "localhost",
+    "port": "3306",
+    "user": "root",
+    "password": "root"
+  },
+  "notify": {
+    "taskStateChange": "http://localhost:9900/notify/task_state_change"
+  },
+  "department": {
+    "rootParentDepartmentId": "0"
+  },
+  "nacos": {
+    "host": "10.192.1.4",
+    "port": 8848,
+    "namespace": "release",
+    "serviceName": "server-gstep",
+    "servicePort": 8216,
+    "serviceIP": "172.18.31.61"
+  }
+}

@@ -99,7 +99,7 @@ func Setup() {
 	setupRoutes()
 
 	server := &http.Server{
-		Addr:         fmt.Sprintf(":%s", config.Config.Port),
+		Addr:         fmt.Sprintf(":%d", config.Config.Port),
 		Handler:      Mux,
 		ReadTimeout:  time.Duration(30 * int(time.Second)),
 		WriteTimeout: time.Duration(30 * int(time.Second)),
