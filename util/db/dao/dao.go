@@ -46,12 +46,22 @@ func SaveOrUpdate(pEntity any, tx *gorm.DB) {
 	}
 }
 
+func GetById[T entity.CommonEntity, I int | string](id I, tx *gorm.DB) *T {
+	var detail T
+
+	err := tx.Table(detail.TableName()).Where("id=?", id).First(&detail).Error
+	if nil != err {
+		panic(ServerError.New(fmt.Sprintf("未找到(表:%s id=%s)记录:%s", detail.TableName(), id, err.Error())))
+	}
+	return &detail
+}
+
 func CheckById[T entity.CommonEntity, I int | string](id I, tx *gorm.DB) *T {
 	var detail T
 
 	err := tx.Table(detail.TableName()).Where("id=?", id).First(&detail).Error
 	if nil != err {
-		panic(ServerError.New(fmt.Sprintf("未找到(表:%s id=%d)记录:%s", detail.TableName(), id, err.Error())))
+		panic(ServerError.New(fmt.Sprintf("未找到(表:%s id=%s)记录:%s", detail.TableName(), id, err.Error())))
 	}
 
 	newId := detail.GetId()

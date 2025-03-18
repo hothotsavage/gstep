@@ -3,6 +3,7 @@ package TaskDao
 import (
 	"fmt"
 	"github.com/gookit/goutil/strutil"
+	"github.com/hothotsavage/gstep/enum/StepCat"
 	"github.com/hothotsavage/gstep/enum/TaskState"
 	"github.com/hothotsavage/gstep/model/dto"
 	"github.com/hothotsavage/gstep/model/entity"
@@ -110,4 +111,17 @@ func DeleteUnstartTasks(processId int, tx *gorm.DB) {
 		msg := fmt.Sprintf("删除下一步任务列表失败(processId=%d)失败: %s", processId, err)
 		panic(ServerError.New(msg))
 	}
+}
+
+// 查询可回退的步骤id列表
+func GetRefusePrevSteps(processId int, tx *gorm.DB) []int {
+	var ids []int
+	err := tx.Raw("select distinct step_id from task where process_id=? "+
+		" and state=?"+
+		" and (category=? or category=?)", processId, TaskState.PASS.Code, StepCat.AUDIT.Code, StepCat.START.Code).Scan(&ids).Error
+	if nil != err {
+		msg := fmt.Sprintf("查询可回退的步骤id列表(processId=%d)失败: %s", processId, err)
+		panic(ServerError.New(msg))
+	}
+	return ids
 }

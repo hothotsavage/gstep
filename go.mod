@@ -1,9 +1,10 @@
 module github.com/hothotsavage/gstep
 
-go 1.20
+go 1.21.0
 
 require (
 	github.com/dop251/goja v0.0.0-20230707174833-636fdf960de1
+	github.com/gookit/goutil v0.6.18
 	github.com/jinzhu/copier v0.3.5
 	github.com/nacos-group/nacos-sdk-go/v2 v2.2.9
 	github.com/robfig/cron v1.2.0
@@ -67,7 +68,6 @@ require (
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/go-sql-driver/mysql v1.7.0 // indirect
 	github.com/google/pprof v0.0.0-20230728192033-2ba5b33183c6 // indirect
-	github.com/gookit/goutil v0.6.18 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	go.uber.org/atomic v1.7.0 // indirect

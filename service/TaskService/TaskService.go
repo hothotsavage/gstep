@@ -16,6 +16,7 @@ import (
 	"github.com/hothotsavage/gstep/model/entity"
 	"github.com/hothotsavage/gstep/model/vo"
 	"github.com/hothotsavage/gstep/service/StepService"
+	"github.com/hothotsavage/gstep/service/TaskAssigneeService"
 	"github.com/hothotsavage/gstep/util/CONSTANT"
 	"github.com/hothotsavage/gstep/util/CollectionUtil"
 	"github.com/hothotsavage/gstep/util/ExpressionUtil"
@@ -156,7 +157,7 @@ func NewTaskByStep(pStep *entity.Step, pProcess *entity.Process, form *map[strin
 }
 
 // 创建启动任务
-func NewStartTask(pProcess *entity.Process, startUserId string, form *map[string]any, memo string, tx *gorm.DB) *entity.Task {
+func NewStartTask(pProcess *entity.Process, startUserId string, form *map[string]any, memo string, tx *gorm.DB) (*entity.Task, *entity.TaskAssignee) {
 	//创建启动任务
 	task := entity.Task{}
 	task.ProcessId = pProcess.Id
@@ -177,7 +178,7 @@ func NewStartTask(pProcess *entity.Process, startUserId string, form *map[string
 	}
 	dao.SaveOrUpdate(&task, tx)
 
-	//创建启动任务的候选人
+	//创建启动任务的执行人
 	assignee := entity.TaskAssignee{}
 	assignee.ProcessId = pProcess.Id
 	assignee.StepId = task.StepId
@@ -189,7 +190,7 @@ func NewStartTask(pProcess *entity.Process, startUserId string, form *map[string
 	assignee.Memo = memo
 	dao.SaveOrUpdate(&assignee, tx)
 
-	return &task
+	return &task, &assignee
 }
 
 // 审核通过流程
@@ -262,6 +263,40 @@ func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB
 	}
 
 	return notifyUserIds
+}
+
+// 生成任务的通知消息文案
+func MakeNotifyMessage(taskAssignee entity.TaskAssignee, tx *gorm.DB) string {
+	name := ""
+	if strutil.IsNotBlank(taskAssignee.UserId) {
+		pUser := dao.CheckById[entity.User](taskAssignee.UserId, tx)
+		if nil != pUser {
+			name = pUser.Name
+		}
+	}
+
+	action := ""
+	pTask := dao.CheckById[entity.Task](taskAssignee.TaskId, tx)
+	if nil != pTask {
+		if pTask.Category == StepCat.START.Code {
+			action = "申请了"
+		} else if pTask.Category == StepCat.AUDIT.Code {
+			action = "审核了"
+		} else if pTask.Category == StepCat.NOTIFY.Code {
+			action = "抄送了"
+		}
+	}
+
+	bill := ""
+	pProcess := dao.CheckById[entity.Process](taskAssignee.ProcessId, tx)
+	if pProcess != nil {
+		pTemplate := dao.CheckById[entity.Template](pProcess.TemplateId, tx)
+		if pTemplate != nil {
+			bill = pTemplate.Title
+		}
+	}
+
+	return fmt.Sprintf("%s%s%s", name, action, bill)
 }
 
 // 调用流程任务状态变更通知回调接口
@@ -393,7 +428,7 @@ func MakeAssignees(task entity.Task, form *map[string]any, tx *gorm.DB) {
 	//		dao.SaveOrUpdate(&assignee, tx)
 	//	} else if c.Category == CandidateCat.DEPARTMENT.Code {
 	//		users := UserDao.GetGrandsonDepartmentUsers(c.Value, tx)
-	//		for _, user := range users {
+	//		for _, UserDao := range users {
 	//			assignee := entity.TaskAssignee{}
 	//			assignee.ProcessId = task.ProcessId
 	//			assignee.StepId = task.StepId
@@ -401,7 +436,7 @@ func MakeAssignees(task entity.Task, form *map[string]any, tx *gorm.DB) {
 	//			assignee.State = task.State
 	//			assignee.SubmitIndex = submitIndex
 	//			assignee.Form = form
-	//			assignee.UserId = user.Id
+	//			assignee.UserId = UserDao.Id
 	//			dao.SaveOrUpdate(&assignee, tx)
 	//		}
 	//	}
@@ -429,4 +464,30 @@ func GetTaskStateChangeVo(processId int, tx *gorm.DB) vo.TaskStateChangeNotifyVo
 	notifyVo.Tasks = taskVos
 
 	return notifyVo
+}
+
+func GetTasksByProcessId(processId int, tx *gorm.DB) []entity.Task {
+	tasks := []entity.Task{}
+	tx.Raw("select * from task where process_id=? order by id asc", processId).Scan(&tasks)
+	return tasks
+}
+
+func ToVO(task entity.Task, tx *gorm.DB) vo.TaskVO {
+	aVO := vo.TaskVO{}
+	aVO.Task = task
+	assignees := TaskAssigneeDao.GetAssigneesByTaskId(task.Id, tx)
+	assigneeVOS := []vo.TaskAssigneeVO{}
+	for _, v := range assignees {
+		assigneeVO := TaskAssigneeService.ToVO(v, tx)
+		assigneeVOS = append(assigneeVOS, assigneeVO)
+	}
+	aVO.Assignees = assigneeVOS
+
+	candidateUsers := []entity.User{}
+	for _, v := range aVO.Candidates {
+		user := dao.GetById[entity.User](v, tx)
+		candidateUsers = append(candidateUsers, *user)
+	}
+	aVO.CandidateUsers = candidateUsers
+	return aVO
 }

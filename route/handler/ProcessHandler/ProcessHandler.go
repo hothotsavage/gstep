@@ -56,3 +56,31 @@ func Refuse(writer http.ResponseWriter, request *http.Request) {
 
 	AjaxJson.SuccessByData(vo).Response(writer)
 }
+
+// 获取驳回到的之前任务列表
+func RefusePrevSteps(writer http.ResponseWriter, request *http.Request) {
+	refusePrevStepsDTO := dto.RefusePrevStepsDTO{}
+	RequestParsUtil.Body2dto(request, &refusePrevStepsDTO)
+
+	tx := DbUtil.GetTx()
+	dao.CheckById[entity.Process](refusePrevStepsDTO.ProcessId, tx)
+	//拒绝
+	steps := ProcessService.RefusePrevSteps(refusePrevStepsDTO.ProcessId, tx)
+
+	tx.Commit()
+
+	AjaxJson.SuccessByData(steps).Response(writer)
+}
+
+func Detail(writer http.ResponseWriter, request *http.Request) {
+	detailDTO := dto.DetailDto{}
+	RequestParsUtil.Body2dto(request, &detailDTO)
+
+	tx := DbUtil.GetTx()
+	process := dao.CheckById[entity.Process](detailDTO.Id, tx)
+	vo := ProcessService.ToDetailVO(process, tx)
+
+	tx.Commit()
+
+	AjaxJson.SuccessByData(vo).Response(writer)
+}

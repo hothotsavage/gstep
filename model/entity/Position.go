@@ -6,7 +6,7 @@ type Position struct {
 }
 
 func (e Position) TableName() string {
-	return "user"
+	return "UserDao"
 }
 
 func (e Position) GetId() any {

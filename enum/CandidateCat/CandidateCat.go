@@ -15,7 +15,7 @@ var FIELD = CandidateCat{}
 var Cats = [3]CandidateCat{}
 
 func init() {
-	USER.Code = "user"
+	USER.Code = "UserDao"
 	USER.Title = "用户"
 
 	DEPARTMENT.Code = "department"

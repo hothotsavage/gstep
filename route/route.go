@@ -10,6 +10,7 @@ import (
 	"github.com/hothotsavage/gstep/route/handler/TaskHandler"
 	"github.com/hothotsavage/gstep/route/handler/TemplateHandler"
 	"github.com/hothotsavage/gstep/util/ServerError"
+	"github.com/hothotsavage/gstep/util/db/DbUtil"
 	"github.com/hothotsavage/gstep/util/net/AjaxJson"
 	"github.com/hothotsavage/gstep/util/net/RequestParsUtil"
 	"log"
@@ -31,7 +32,8 @@ func middleware(h http.HandlerFunc) http.HandlerFunc {
 func noAuthMiddleware(h http.HandlerFunc) http.HandlerFunc {
 	handler := errorHandle(h)
 	handler = jsonResponseHead(handler)
-	handler = crossOrigin(handler)
+	//spring cloud gateway 已经处理跨域
+	//handler = crossOrigin(handler)
 	return handler
 }
 
@@ -61,6 +63,9 @@ func errorHandle(h http.HandlerFunc) http.HandlerFunc {
 		defer func() {
 			err := recover()
 
+			tx := DbUtil.GetTx()
+			tx.Rollback()
+
 			if nil != err {
 				debug.PrintStack()
 				AjaxJson.Fail(fmt.Sprintf("%s", err)).Response(w)
@@ -74,15 +79,18 @@ func errorHandle(h http.HandlerFunc) http.HandlerFunc {
 func crossOrigin(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Methods", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,x-requested-with,Authorization")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		//w.Header().Set("Access-Control-Allow-Headers", "Content-Type,x-requested-with,Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		//w.Header().Set("Access-Control-Allow-Credentials", "true")
+		//w.Header().Set("Access-Control-Allow-Origin", "*")
 
 		//注意:Access-Control-Allow-Origin不能设置成*
-		if len(r.Header.Get("Origin")) > 0 {
-			w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
-		} else if len(r.Header.Get("Referer")) > 0 {
-			w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Referer"))
-		}
+		//if len(r.Header.Get("Origin")) > 0 {
+		//	w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+		//}
+		//if len(r.Header.Get("Referer")) > 0 {
+		//	w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Referer"))
+		//}
 
 		//预请求只返回响应头
 		if "OPTIONS" == r.Method {
@@ -132,8 +140,12 @@ func setupRoutes() {
 	Mux.HandleFunc("/process/start", noAuthMiddleware(ProcessHandler.Start))
 	//任务审核
 	Mux.HandleFunc("/process/pass", noAuthMiddleware(ProcessHandler.Pass))
-	//任务回退
+	//任务驳回
 	Mux.HandleFunc("/process/refuse", noAuthMiddleware(ProcessHandler.Refuse))
+	//查询驳回步骤列表
+	Mux.HandleFunc("/process/refuse_prevsteps", noAuthMiddleware(ProcessHandler.RefusePrevSteps))
+	//详情
+	Mux.HandleFunc("/process/detail", noAuthMiddleware(ProcessHandler.Detail))
 
 	//查询我的任务
 	Mux.HandleFunc("/task/pending", noAuthMiddleware(TaskHandler.Pending))

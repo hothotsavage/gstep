@@ -4,14 +4,14 @@ import "github.com/hothotsavage/gstep/util/db/entity"
 
 type Task struct {
 	entity.BaseEntity
-	ProcessId   int
+	ProcessId   int             `json:"processId"`
 	Form        *map[string]any `json:"form" gorm:"serializer:json"`
-	AuditMethod string
-	StepId      int
-	Title       string
-	Category    string
-	State       string
-	Candidates  []string `json:"candidates" gorm:"serializer:json"`
+	AuditMethod string          `json:"auditMethod"`
+	StepId      int             `json:"stepId"`
+	Title       string          `json:"title"`
+	Category    string          `json:"category"`
+	State       string          `json:"state"`
+	Candidates  []string        `json:"candidates" gorm:"serializer:json"`
 }
 
 func (e Task) TableName() string {

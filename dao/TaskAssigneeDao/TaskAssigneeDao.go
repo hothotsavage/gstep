@@ -50,6 +50,15 @@ func GetLastSubmitAssigneesByTask(processId int, taskId int, tx *gorm.DB) []enti
 	return assignees
 }
 
+func GetAssigneesByTaskId(taskId int, tx *gorm.DB) []entity.TaskAssignee {
+	assignees := []entity.TaskAssignee{}
+	tx.Raw("select * from task_assignee a "+
+		" where 1=1 "+
+		" and a.task_id=? "+
+		" order by a.submit_index asc ", taskId).Scan(&assignees)
+	return assignees
+}
+
 func GetTasksByLastSubmitIndex(processId int, tx *gorm.DB) []entity.Task {
 	maxSubmitIndex := GetMaxSubmitIndex(processId, tx)
 

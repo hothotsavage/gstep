@@ -1,6 +1,7 @@
 package ProcessService
 
 import (
+	"fmt"
 	"github.com/hothotsavage/gstep/dao/TaskAssigneeDao"
 	"github.com/hothotsavage/gstep/dao/TaskDao"
 	"github.com/hothotsavage/gstep/dao/TemplateDao"
@@ -40,7 +41,7 @@ func Start(processStartDto *dto.ProcessStartDto, tx *gorm.DB) vo.NotifyVO {
 	processVO := ToVO(&process, tx)
 
 	//创建启动任务
-	startTask := TaskService.NewStartTask(&process, processStartDto.UserId, processStartDto.Form, processStartDto.Memo, tx)
+	pStartTask, pTaskAssignee := TaskService.NewStartTask(&process, processStartDto.UserId, processStartDto.Form, processStartDto.Memo, tx)
 
 	notifyUserIds := []string{}
 	//创建后续的任务列表
@@ -52,10 +53,14 @@ func Start(processStartDto *dto.ProcessStartDto, tx *gorm.DB) vo.NotifyVO {
 	//任务状态变更通知
 	//TaskService.NotifyTasksStateChange(process.Id, tx)
 
+	//生成通知消息文案
+	notifyMessage := TaskService.MakeNotifyMessage(*pTaskAssignee, tx)
+
 	notifyVO := vo.NotifyVO{
 		process.Id,
-		startTask.Id,
+		pStartTask.Id,
 		notifyUserIds,
+		notifyMessage,
 	}
 	return notifyVO
 }
@@ -121,10 +126,14 @@ func Pass(processPassDto dto.ProcessPassDto, tx *gorm.DB) vo.NotifyVO {
 	//任务状态变更通知
 	//TaskService.NotifyTasksStateChange(pProcess.Id, tx)
 
+	//生成通知消息文案
+	notifyMessage := TaskService.MakeNotifyMessage(assignee, tx)
+
 	notifyVO := vo.NotifyVO{
 		pProcess.Id,
 		pStartedTask.Id,
 		notifyUserIds,
+		notifyMessage,
 	}
 	return notifyVO
 }
@@ -190,16 +199,20 @@ func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) vo.NotifyVO {
 	//任务状态变更通知
 	//TaskService.NotifyTasksStateChange(pProcess.Id, tx)
 
+	//生成通知消息文案
+	notifyMessage := TaskService.MakeNotifyMessage(assignee, tx)
+
 	notifyVO := vo.NotifyVO{
 		processRefuseDto.ProcessId,
 		pStartedTask.Id,
 		notifyUserIds,
+		notifyMessage,
 	}
 	return notifyVO
 }
 
-func ToVO(pProcess *entity.Process, tx *gorm.DB) vo.ProcessVo {
-	aVo := vo.ProcessVo{}
+func ToVO(pProcess *entity.Process, tx *gorm.DB) vo.ProcessVO {
+	aVo := vo.ProcessVO{}
 	if nil == pProcess {
 		return aVo
 	}
@@ -211,24 +224,59 @@ func ToVO(pProcess *entity.Process, tx *gorm.DB) vo.ProcessVo {
 	return aVo
 }
 
+func ToDetailVO(pProcess *entity.Process, tx *gorm.DB) vo.ProcessDetailVO {
+	aVo := vo.ProcessDetailVO{}
+	if nil == pProcess {
+		return aVo
+	}
+
+	aVo.Process = *pProcess
+	template := dao.CheckById[entity.Template](pProcess.TemplateId, tx)
+	aVo.Template = *template
+
+	tasks := TaskService.GetTasksByProcessId(pProcess.Id, tx)
+	taskVOs := []vo.TaskVO{}
+	for _, task := range tasks {
+		taskVO := TaskService.ToVO(task, tx)
+		taskVOs = append(taskVOs, taskVO)
+	}
+	aVo.Tasks = taskVOs
+	return aVo
+}
+
 func GetStep(processId int, stepId int, tx *gorm.DB) entity.Step {
 	pPrcess := dao.CheckById[entity.Process](processId, tx)
 	processVO := ToVO(pPrcess, tx)
 	pStep := StepService.FindStep(&processVO.Template.RootStep, stepId)
 
 	if nil == pStep {
-		panic(ServerError.New("无效的步骤id"))
+		panic(ServerError.New(fmt.Sprintf("无效的步骤id: %d", stepId)))
 	}
 
 	return *pStep
+}
+
+func GetSteps(processId int, stepIds []int, tx *gorm.DB) []entity.Step {
+	pPrcess := dao.CheckById[entity.Process](processId, tx)
+	processVO := ToVO(pPrcess, tx)
+	steps := []entity.Step{}
+	for _, stepId := range stepIds {
+		pStep := StepService.FindStep(&processVO.Template.RootStep, stepId)
+		if nil == pStep {
+			panic(ServerError.New(fmt.Sprintf("无效的步骤id: %d", stepId)))
+		}
+		steps = append(steps, *pStep)
+	}
+
+	return steps
 }
 
 func GetNextStep(processId int, startStepId int, tx *gorm.DB) entity.Step {
 	pPrcess := dao.CheckById[entity.Process](processId, tx)
 	processVO := ToVO(pPrcess, tx)
 	pStep := StepService.FindStep(&processVO.Template.RootStep, startStepId)
-	if nil == pStep {
-		panic(ServerError.New("无效的步骤id"))
+	if nil == pStep || pStep.Id < 1 {
+		panic(ServerError.New("无效的流程步骤id"))
 	}
 
 	return *pStep.NextStep
@@ -266,4 +314,11 @@ func UpdateProcessState(processId int, tx *gorm.DB) {
 func IsFinish(processId int, tx *gorm.DB) bool {
 	isFinish := TaskDao.IsProcessFinish(processId, tx)
 	return isFinish
+}
+
+// 查询可回退的步骤列表
+func RefusePrevSteps(processId int, tx *gorm.DB) []entity.Step {
+	stepIds := TaskDao.GetRefusePrevSteps(processId, tx)
+	steps := GetSteps(processId, stepIds, tx)
+	return steps
 }

@@ -155,7 +155,7 @@ DROP VIEW IF EXISTS `position`;
 CREATE ALGORITHM = UNDEFINED DEFINER = `root`@`localhost` SQL SECURITY DEFINER VIEW `position` AS select distinct `hr_user`.`position` AS `title`,`hr_user`.`position_code` AS `code` from `hr_user` where ((length(ifnull(`hr_user`.`position_code`,'')) > 0) and (length(ifnull(`hr_user`.`position`,'')) > 0));
 
 -- ----------------------------
--- View structure for user
+-- View structure for UserDao
 -- ----------------------------
 DROP VIEW IF EXISTS `user`;
 CREATE ALGORITHM = UNDEFINED DEFINER = `root`@`localhost` SQL SECURITY DEFINER VIEW `user` AS select `hr_user`.`id` AS `id`,`hr_user`.`name` AS `name`,`hr_user`.`position` AS `position_title`,`hr_user`.`position_code` AS `position_code`,`hr_user`.`is_leader` AS `is_leader`,`hr_user`.`department_id` AS `department_id` from `hr_user`;
