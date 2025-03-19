@@ -32,6 +32,7 @@ type Configuration struct {
 		ServiceIP   string
 		ServiceName string
 	}
+	IsDebugLocal bool
 }
 
 // 全局配置
@@ -40,8 +41,8 @@ var Config = &Configuration{}
 func Setup() {
 	//将配置文件:config.json中的配置读取到Config
 	//---debug---------------------------------------
-	//file, err := os.Open("config_debug.json")
-	file, err := os.Open("./config_release.json")
+	file, err := os.Open("config_debug_local.json")
+	//file, err := os.Open("./config_debug_nacos.json")
 	if err != nil {
 		log.Printf("cannot open file config.LogUtil: %v", err)
 		panic(err)

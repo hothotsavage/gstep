@@ -32,8 +32,12 @@ func middleware(h http.HandlerFunc) http.HandlerFunc {
 func noAuthMiddleware(h http.HandlerFunc) http.HandlerFunc {
 	handler := errorHandle(h)
 	handler = jsonResponseHead(handler)
-	//spring cloud gateway 已经处理跨域
-	//handler = crossOrigin(handler)
+	//本地调试时需要处理跨域
+	if config.Config.IsDebugLocal {
+		//接入spring cloud gateway后,不需要处理跨域
+		//spring cloud gateway 已经处理跨域
+		handler = crossOrigin(handler)
+	}
 	return handler
 }
 
@@ -79,15 +83,16 @@ func errorHandle(h http.HandlerFunc) http.HandlerFunc {
 func crossOrigin(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Methods", "*")
-		//w.Header().Set("Access-Control-Allow-Headers", "Content-Type,x-requested-with,Authorization")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
-		//w.Header().Set("Access-Control-Allow-Credentials", "true")
-		//w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,x-requested-with,Authorization")
+		//w.Header().Set("Access-Control-Allow-Headers", "*")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		//注意:Access-Control-Allow-Origin不能设置成*
-		//if len(r.Header.Get("Origin")) > 0 {
-		//	w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
-		//}
+		//w.Header().Set("Access-Control-Allow-Origin", "*")
+		if len(r.Header.Get("Origin")) > 0 {
+			w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+			//w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+		}
 		//if len(r.Header.Get("Referer")) > 0 {
 		//	w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Referer"))
 		//}

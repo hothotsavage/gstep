@@ -13,12 +13,5 @@
   "department": {
     "rootParentDepartmentId": "1"
   },
-  "nacos": {
-    "host": "10.192.1.4",
-    "port": 8848,
-    "namespace": "release",
-    "serviceName": "server-gstep",
-    "servicePort": 8216,
-    "serviceIP": "172.18.31.61"
-  }
+  "isDebugLocal": true
 }

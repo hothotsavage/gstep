@@ -257,6 +257,7 @@ func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB
 			if unstartTask.State == TaskState.UNSTART.Code {
 				unstartTask.State = TaskState.STARTED.Code
 				dao.SaveOrUpdate(&unstartTask, tx)
+				notifyUserIds = append(notifyUserIds, unstartTask.Candidates...)
 				break
 			}
 		}

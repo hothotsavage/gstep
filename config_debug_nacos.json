@@ -20,5 +20,6 @@
     "serviceName": "server-gstep",
     "servicePort": 8216,
     "serviceIP": "172.18.31.61"
-  }
+  },
+  "isDebugLocal": false
 }

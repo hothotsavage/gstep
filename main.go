@@ -11,7 +11,9 @@ import (
 func main() {
 	config.Setup()
 	DbUtil.Setup()
-	nacos.Setup()
+	if !config.Config.IsDebugLocal {
+		nacos.Setup()
+	}
 	route.Setup()
 	job.Setup()
 }
