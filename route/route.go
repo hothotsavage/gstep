@@ -3,19 +3,20 @@ package route
 import (
 	"fmt"
 	"github.com/hothotsavage/gstep/config"
+	"github.com/hothotsavage/gstep/ctx"
 	"github.com/hothotsavage/gstep/route/handler/DepartmentHandler"
 	"github.com/hothotsavage/gstep/route/handler/NotifyHandler"
 	"github.com/hothotsavage/gstep/route/handler/PositionHandler"
 	"github.com/hothotsavage/gstep/route/handler/ProcessHandler"
 	"github.com/hothotsavage/gstep/route/handler/TaskHandler"
 	"github.com/hothotsavage/gstep/route/handler/TemplateHandler"
+	"github.com/hothotsavage/gstep/route/handler/TestHandler"
 	"github.com/hothotsavage/gstep/util/ServerError"
 	"github.com/hothotsavage/gstep/util/db/DbUtil"
 	"github.com/hothotsavage/gstep/util/net/AjaxJson"
 	"github.com/hothotsavage/gstep/util/net/RequestParsUtil"
 	"log"
 	"net/http"
-	"runtime/debug"
 	"time"
 )
 
@@ -23,14 +24,14 @@ var Mux = http.NewServeMux()
 
 func middleware(h http.HandlerFunc) http.HandlerFunc {
 	handler := authHandle(h)
-	handler = errorHandle(handler)
+	handler = transaction(handler)
 	handler = jsonResponseHead(handler)
 	handler = crossOrigin(handler)
 	return handler
 }
 
 func noAuthMiddleware(h http.HandlerFunc) http.HandlerFunc {
-	handler := errorHandle(h)
+	handler := transaction(h)
 	handler = jsonResponseHead(handler)
 	//本地调试时需要处理跨域
 	if config.Config.IsDebugLocal {
@@ -62,23 +63,23 @@ func authHandle(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func errorHandle(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			err := recover()
-
-			tx := DbUtil.GetTx()
-			tx.Rollback()
-
-			if nil != err {
-				debug.PrintStack()
-				AjaxJson.Fail(fmt.Sprintf("%s", err)).Response(w)
-			}
-		}()
-
-		h(w, r)
-	}
-}
+//func errorHandle(h http.HandlerFunc) http.HandlerFunc {
+//	return func(w http.ResponseWriter, r *http.Request) {
+//		defer func() {
+//			err := recover()
+//
+//			tx := DbUtil.GetTx()
+//			tx.Rollback()
+//
+//			if nil != err {
+//				debug.PrintStack()
+//				AjaxJson.Fail(fmt.Sprintf("%s", err)).Response(w)
+//			}
+//		}()
+//
+//		h(w, r)
+//	}
+//}
 
 func crossOrigin(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -105,6 +106,27 @@ func crossOrigin(h http.HandlerFunc) http.HandlerFunc {
 		}
 
 		h(w, r)
+	}
+}
+
+// 事务及错误处理
+func transaction(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tx := DbUtil.Db.Begin()
+
+		defer func() {
+			if er := recover(); er != nil {
+				tx.Rollback()
+				AjaxJson.Fail(fmt.Sprintf("%s", er)).Response(w)
+				return
+			}
+		}()
+
+		//将事务对象写入context
+		r = ctx.SetTx(r, tx)
+
+		h(w, r)
+		tx.Commit()
 	}
 }
 
@@ -166,4 +188,7 @@ func setupRoutes() {
 
 	//职位查询
 	Mux.HandleFunc("/position/positions", noAuthMiddleware(PositionHandler.GetPositions))
+
+	//职位查询
+	Mux.HandleFunc("/test/hello", noAuthMiddleware(TestHandler.Hello))
 }

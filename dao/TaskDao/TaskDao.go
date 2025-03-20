@@ -116,9 +116,17 @@ func DeleteUnstartTasks(processId int, tx *gorm.DB) {
 // 查询可回退的步骤id列表
 func GetRefusePrevSteps(processId int, tx *gorm.DB) []int {
 	var ids []int
-	err := tx.Raw("select distinct step_id from task where process_id=? "+
+	maxRefuseId := 0
+	err := tx.Raw("select max(id) from task "+
+		" where process_id = ? and state=?", processId, TaskState.REFUSE.Code).Scan(&maxRefuseId).Error
+	if nil != err {
+		msg := fmt.Sprintf("查询流程(processId=%d)的最大拒绝taskId失败: %s", processId, err)
+		panic(ServerError.New(msg))
+	}
+	err = tx.Raw("select distinct step_id from task where process_id=? "+
 		" and state=?"+
-		" and (category=? or category=?)", processId, TaskState.PASS.Code, StepCat.AUDIT.Code, StepCat.START.Code).Scan(&ids).Error
+		" and (category=? or category=?) "+
+		" and id>?", processId, TaskState.PASS.Code, StepCat.AUDIT.Code, StepCat.START.Code, maxRefuseId).Scan(&ids).Error
 	if nil != err {
 		msg := fmt.Sprintf("查询可回退的步骤id列表(processId=%d)失败: %s", processId, err)
 		panic(ServerError.New(msg))

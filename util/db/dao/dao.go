@@ -58,7 +58,6 @@ func GetById[T entity.CommonEntity, I int | string](id I, tx *gorm.DB) *T {
 
 func CheckById[T entity.CommonEntity, I int | string](id I, tx *gorm.DB) *T {
 	var detail T
-
 	err := tx.Table(detail.TableName()).Where("id=?", id).First(&detail).Error
 	if nil != err {
 		panic(ServerError.New(fmt.Sprintf("未找到(表:%s id=%s)记录:%s", detail.TableName(), id, err.Error())))

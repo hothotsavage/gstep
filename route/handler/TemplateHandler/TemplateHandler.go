@@ -1,11 +1,11 @@
 package TemplateHandler
 
 import (
+	"github.com/hothotsavage/gstep/ctx"
 	"github.com/hothotsavage/gstep/dao/TemplateDao"
 	"github.com/hothotsavage/gstep/model/dto"
 	"github.com/hothotsavage/gstep/model/entity"
 	"github.com/hothotsavage/gstep/service/TemplateService"
-	"github.com/hothotsavage/gstep/util/db/DbUtil"
 	"github.com/hothotsavage/gstep/util/db/dao"
 	"github.com/hothotsavage/gstep/util/net/AjaxJson"
 	"github.com/hothotsavage/gstep/util/net/RequestParsUtil"
@@ -16,7 +16,8 @@ func Save(writer http.ResponseWriter, request *http.Request) {
 	template := entity.Template{}
 	RequestParsUtil.Body2dto(request, &template)
 
-	tx := DbUtil.GetTx()
+	tx := ctx.GetTx(request)
+
 	//已存在版本
 	if template.Id > 0 {
 		oldTemplate := dao.CheckById[entity.Template](template.Id, tx)
@@ -37,21 +38,25 @@ func Save(writer http.ResponseWriter, request *http.Request) {
 	}
 	dao.SaveOrUpdate(&template, tx)
 
-	tx.Commit()
 	AjaxJson.SuccessByData(template.Id).Response(writer)
 }
 
 func Query(writer http.ResponseWriter, request *http.Request) {
 	dto := dto.TemplateQueryDto{}
 	RequestParsUtil.Body2dto(request, &dto)
-	list := TemplateService.Query(&dto, DbUtil.Db)
+	tx := ctx.GetTx(request)
+
+	list := TemplateService.Query(&dto, tx)
 	AjaxJson.SuccessByData(list).Response(writer)
 }
 
 func Detail(writer http.ResponseWriter, request *http.Request) {
 	dto := dto.TemplateQueryDetailDto{}
 	RequestParsUtil.Body2dto(request, &dto)
-	pDetail := TemplateService.QueryDetail(&dto, DbUtil.Db)
+
+	tx := ctx.GetTx(request)
+
+	pDetail := TemplateService.QueryDetail(&dto, tx)
 	if nil == pDetail {
 		AjaxJson.Fail("查不到模板数据").Response(writer)
 		return
@@ -62,7 +67,10 @@ func Detail(writer http.ResponseWriter, request *http.Request) {
 func Info(writer http.ResponseWriter, request *http.Request) {
 	dto := dto.TemplateQueryInfoDto{}
 	RequestParsUtil.Body2dto(request, &dto)
-	pDetail := TemplateService.QueryInfo(&dto, DbUtil.Db)
+
+	tx := ctx.GetTx(request)
+
+	pDetail := TemplateService.QueryInfo(&dto, tx)
 	if nil == pDetail {
 		AjaxJson.Fail("查不到模板数据").Response(writer)
 		return
@@ -74,11 +82,11 @@ func SaveInfo(writer http.ResponseWriter, request *http.Request) {
 	template := entity.Template{}
 	RequestParsUtil.Body2dto(request, &template)
 
-	tx := DbUtil.GetTx()
+	tx := ctx.GetTx(request)
+
 	oldTemplate := dao.CheckById[entity.Template](template.Id, tx)
 	oldTemplate.Title = template.Title
 	dao.SaveOrUpdate(&template, tx)
 
-	tx.Commit()
 	AjaxJson.SuccessByData(template.Id).Response(writer)
 }

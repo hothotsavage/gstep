@@ -62,7 +62,7 @@ func Cease(pDto *dto.TaskCeaseDto, tx *gorm.DB) int {
 // 碰到分支步骤,取满足条件的条件步骤
 // 碰到条件步骤,取条件步骤的下一个步骤
 func GetNextStep(currentStepId int, pTemplate *entity.Template, form *map[string]any, tx *gorm.DB) *entity.Step {
-	pStep := StepService.FindStep(&pTemplate.RootStep, currentStepId)
+	pStep := StepService.FindStep(&pTemplate.RootStep, currentStepId, tx)
 
 	if nil == pStep {
 		panic(ServerError.New("找不到流程步骤"))
@@ -112,7 +112,7 @@ func GetNextStep(currentStepId int, pTemplate *entity.Template, form *map[string
 		return pNextStep
 	} else {
 		//从父分支步骤开始往前递归查找有下一步的分支步骤
-		pPrevBranchStep := StepService.FindPrevBranchStepWithNextStep(&pTemplate.RootStep, pStep.Id)
+		pPrevBranchStep := StepService.FindPrevBranchStepWithNextStep(&pTemplate.RootStep, pStep.Id, tx)
 		if nil != pPrevBranchStep.NextStep {
 			return pPrevBranchStep.NextStep
 		}
@@ -205,7 +205,7 @@ func FinishPassProcess(pProcess *entity.Process, tx *gorm.DB) {
 func MakeTasks(processId int, startStepId int, form *map[string]any, tx *gorm.DB) []string {
 	pProcess := dao.CheckById[entity.Process](processId, tx)
 	pTemplate := dao.CheckById[entity.Template](pProcess.TemplateId, tx)
-	pStartStep := StepService.FindStep(&pTemplate.RootStep, startStepId)
+	pStartStep := StepService.FindStep(&pTemplate.RootStep, startStepId, tx)
 	if pStartStep == nil {
 		panic(ServerError.New(fmt.Sprintf("找不到流程步骤(stepId=%s)", startStepId)))
 	}
@@ -345,8 +345,8 @@ func CheckCandidate(userId string, form *map[string]any, taskId int, tx *gorm.DB
 	//			return
 	//		}
 	//	} else if v.Category == CandidateCat.DEPARTMENT.Code {
-	//		departments := DepartmentDao.GetGrandsonDepartments(v.Value, tx)
-	//		isIn := UserDao.IsUserInDepartments(userId, departments, tx)
+	//		departments := DepartmentDao.GetGrandsonDepartments(v.Value)
+	//		isIn := UserDao.IsUserInDepartments(userId, departments)
 	//		if isIn {
 	//			return
 	//		}
@@ -415,7 +415,7 @@ func MakeAssignees(task entity.Task, form *map[string]any, tx *gorm.DB) {
 	//		assignee.SubmitIndex = submitIndex
 	//		assignee.Form = form
 	//		assignee.UserId = c.Value
-	//		dao.SaveOrUpdate(&assignee, tx)
+	//		dao.SaveOrUpdate(&assignee)
 	//	} else if c.Category == CandidateCat.FIELD.Code {
 	//		assignee := entity.TaskAssignee{}
 	//		assignee.ProcessId = task.ProcessId
@@ -426,9 +426,9 @@ func MakeAssignees(task entity.Task, form *map[string]any, tx *gorm.DB) {
 	//		assignee.Form = form
 	//		userId := (*form)[c.Value]
 	//		assignee.UserId = userId.(string)
-	//		dao.SaveOrUpdate(&assignee, tx)
+	//		dao.SaveOrUpdate(&assignee)
 	//	} else if c.Category == CandidateCat.DEPARTMENT.Code {
-	//		users := UserDao.GetGrandsonDepartmentUsers(c.Value, tx)
+	//		users := UserDao.GetGrandsonDepartmentUsers(c.Value)
 	//		for _, UserDao := range users {
 	//			assignee := entity.TaskAssignee{}
 	//			assignee.ProcessId = task.ProcessId
@@ -438,7 +438,7 @@ func MakeAssignees(task entity.Task, form *map[string]any, tx *gorm.DB) {
 	//			assignee.SubmitIndex = submitIndex
 	//			assignee.Form = form
 	//			assignee.UserId = UserDao.Id
-	//			dao.SaveOrUpdate(&assignee, tx)
+	//			dao.SaveOrUpdate(&assignee)
 	//		}
 	//	}
 	//	submitIndex++

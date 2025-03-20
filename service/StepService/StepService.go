@@ -13,11 +13,11 @@ import (
 
 func GetStepByTemplateId(templateId int, stepId int, tx *gorm.DB) *entity.Step {
 	template := dao.CheckById[entity.Template](templateId, tx)
-	pStep := FindStep(&template.RootStep, stepId)
+	pStep := FindStep(&template.RootStep, stepId, tx)
 	return pStep
 }
 
-func FindStep(pParentStep *entity.Step, stepId int) *entity.Step {
+func FindStep(pParentStep *entity.Step, stepId int, tx *gorm.DB) *entity.Step {
 	if nil == pParentStep {
 		return nil
 	}
@@ -37,14 +37,14 @@ func FindStep(pParentStep *entity.Step, stepId int) *entity.Step {
 	}
 
 	if nil != pParentStep {
-		aStep := FindStep(pParentStep.NextStep, stepId)
+		aStep := FindStep(pParentStep.NextStep, stepId, tx)
 		if nil != aStep {
 			return aStep
 		}
 	}
 
 	for _, v := range pParentStep.BranchSteps {
-		pFindOne := FindStep(v, stepId)
+		pFindOne := FindStep(v, stepId, tx)
 		if nil != pFindOne {
 			return pFindOne
 		}
@@ -56,7 +56,7 @@ func FindStep(pParentStep *entity.Step, stepId int) *entity.Step {
 // 递归查找指定步骤的前一个步骤
 // pParentStep 父步骤
 // targetStepId 查询的步骤id
-func FindPrevStep(pParentStep *entity.Step, targetStepId int) *entity.Step {
+func FindPrevStep(pParentStep *entity.Step, targetStepId int, tx *gorm.DB) *entity.Step {
 	if nil == pParentStep {
 		return nil
 	}
@@ -72,14 +72,14 @@ func FindPrevStep(pParentStep *entity.Step, targetStepId int) *entity.Step {
 	}
 
 	if nil != pParentStep.NextStep {
-		pNextStep := FindPrevStep(pParentStep.NextStep, targetStepId)
+		pNextStep := FindPrevStep(pParentStep.NextStep, targetStepId, tx)
 		if nil != pNextStep {
 			return pNextStep
 		}
 	}
 
 	for _, v := range pParentStep.BranchSteps {
-		pFindOne := FindPrevStep(v, targetStepId)
+		pFindOne := FindPrevStep(v, targetStepId, tx)
 		if nil != pFindOne {
 			return pFindOne
 		}
@@ -89,8 +89,8 @@ func FindPrevStep(pParentStep *entity.Step, targetStepId int) *entity.Step {
 }
 
 // 递归查找前一个分支步骤
-func FindPrevBranchStepWithNextStep(pRootStep *entity.Step, targetStepId int) *entity.Step {
-	pPrevStep := FindPrevStep(pRootStep, targetStepId)
+func FindPrevBranchStepWithNextStep(pRootStep *entity.Step, targetStepId int, tx *gorm.DB) *entity.Step {
+	pPrevStep := FindPrevStep(pRootStep, targetStepId, tx)
 
 	if nil == pPrevStep {
 		return nil
@@ -100,15 +100,15 @@ func FindPrevBranchStepWithNextStep(pRootStep *entity.Step, targetStepId int) *e
 		return pPrevStep
 	}
 
-	pPrevPrevStep := FindPrevBranchStepWithNextStep(pRootStep, pPrevStep.Id)
+	pPrevPrevStep := FindPrevBranchStepWithNextStep(pRootStep, pPrevStep.Id, tx)
 	return pPrevPrevStep
 }
 
 // 查找前一个审核步骤
-func FindPrevAuditStep(pRootStep *entity.Step, beginStepId int) *entity.Step {
+func FindPrevAuditStep(pRootStep *entity.Step, beginStepId int, tx *gorm.DB) *entity.Step {
 	fromStepId := beginStepId
 	for {
-		pPrevStep := FindPrevStep(pRootStep, fromStepId)
+		pPrevStep := FindPrevStep(pRootStep, fromStepId, tx)
 		if nil == pPrevStep || pPrevStep.Id == 0 {
 			return nil
 		}
@@ -121,11 +121,11 @@ func FindPrevAuditStep(pRootStep *entity.Step, beginStepId int) *entity.Step {
 }
 
 // 查询前面所有审核步骤列表
-func FindPrevAuditSteps(pRootStep *entity.Step, beginStepId int) []entity.Step {
+func FindPrevAuditSteps(pRootStep *entity.Step, beginStepId int, tx *gorm.DB) []entity.Step {
 	auditSteps := []entity.Step{}
 	fromStepId := beginStepId
 	for {
-		pPrevStep := FindPrevAuditStep(pRootStep, fromStepId)
+		pPrevStep := FindPrevAuditStep(pRootStep, fromStepId, tx)
 		if nil == pPrevStep {
 			return auditSteps
 		}
@@ -138,11 +138,11 @@ func FindPrevAuditSteps(pRootStep *entity.Step, beginStepId int) []entity.Step {
 }
 
 // 查询之前到指定步骤的审核列表
-func FindPrevAuditStepsByEndId(pRootStep *entity.Step, beginStepId int, endStepId int) []entity.Step {
+func FindPrevAuditStepsByEndId(pRootStep *entity.Step, beginStepId int, endStepId int, tx *gorm.DB) []entity.Step {
 	auditpSteps := []entity.Step{}
 	fromStepId := beginStepId
 	for {
-		pPrevStep := FindPrevAuditStep(pRootStep, fromStepId)
+		pPrevStep := FindPrevAuditStep(pRootStep, fromStepId, tx)
 
 		if nil == pPrevStep {
 			return auditpSteps
@@ -163,7 +163,7 @@ func FindPrevAuditStepsByEndId(pRootStep *entity.Step, beginStepId int, endStepI
 // 检查指定步骤的候选人
 func CheckStepCandidate(userId string, form *map[string]any, templateId int, stepId int, tx *gorm.DB) {
 	pTemplate := dao.CheckById[entity.Template](templateId, tx)
-	pStep := FindStep(&pTemplate.RootStep, stepId)
+	pStep := FindStep(&pTemplate.RootStep, stepId, tx)
 	//没有候选人名单，表示所有人都可提交，直接通过
 	if len(pStep.Candidates) < 1 {
 		return
@@ -196,6 +196,6 @@ func CandidateCount(taskId int, tx *gorm.DB) int {
 	pTask := dao.CheckById[entity.Task](taskId, tx)
 	pProcess := dao.CheckById[entity.Process](pTask.ProcessId, tx)
 	pTemplate := dao.CheckById[entity.Template](pProcess.TemplateId, tx)
-	pStep := FindStep(&pTemplate.RootStep, pTask.StepId)
+	pStep := FindStep(&pTemplate.RootStep, pTask.StepId, tx)
 	return len(pStep.Candidates)
 }

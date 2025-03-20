@@ -51,7 +51,7 @@ func Start(processStartDto *dto.ProcessStartDto, tx *gorm.DB) vo.NotifyVO {
 	}
 
 	//任务状态变更通知
-	//TaskService.NotifyTasksStateChange(process.Id, tx)
+	//TaskService.NotifyTasksStateChange(process.Id)
 
 	//生成通知消息文案
 	notifyMessage := TaskService.MakeNotifyMessage(*pTaskAssignee, tx)
@@ -124,7 +124,7 @@ func Pass(processPassDto dto.ProcessPassDto, tx *gorm.DB) vo.NotifyVO {
 	UpdateProcessState(processPassDto.ProcessId, tx)
 
 	//任务状态变更通知
-	//TaskService.NotifyTasksStateChange(pProcess.Id, tx)
+	//TaskService.NotifyTasksStateChange(pProcess.Id)
 
 	//生成通知消息文案
 	notifyMessage := TaskService.MakeNotifyMessage(assignee, tx)
@@ -197,7 +197,7 @@ func Refuse(processRefuseDto dto.ProcessRefuseDto, tx *gorm.DB) vo.NotifyVO {
 	UpdateProcessState(processRefuseDto.ProcessId, tx)
 
 	//任务状态变更通知
-	//TaskService.NotifyTasksStateChange(pProcess.Id, tx)
+	//TaskService.NotifyTasksStateChange(pProcess.Id)
 
 	//生成通知消息文案
 	notifyMessage := TaskService.MakeNotifyMessage(assignee, tx)
@@ -247,7 +247,7 @@ func ToDetailVO(pProcess *entity.Process, tx *gorm.DB) vo.ProcessDetailVO {
 func GetStep(processId int, stepId int, tx *gorm.DB) entity.Step {
 	pPrcess := dao.CheckById[entity.Process](processId, tx)
 	processVO := ToVO(pPrcess, tx)
-	pStep := StepService.FindStep(&processVO.Template.RootStep, stepId)
+	pStep := StepService.FindStep(&processVO.Template.RootStep, stepId, tx)
 
 	if nil == pStep {
 		panic(ServerError.New(fmt.Sprintf("无效的步骤id: %d", stepId)))
@@ -261,7 +261,7 @@ func GetSteps(processId int, stepIds []int, tx *gorm.DB) []entity.Step {
 	processVO := ToVO(pPrcess, tx)
 	steps := []entity.Step{}
 	for _, stepId := range stepIds {
-		pStep := StepService.FindStep(&processVO.Template.RootStep, stepId)
+		pStep := StepService.FindStep(&processVO.Template.RootStep, stepId, tx)
 		if nil == pStep {
 			panic(ServerError.New(fmt.Sprintf("无效的步骤id: %d", stepId)))
 		}
@@ -274,7 +274,7 @@ func GetSteps(processId int, stepIds []int, tx *gorm.DB) []entity.Step {
 func GetNextStep(processId int, startStepId int, tx *gorm.DB) entity.Step {
 	pPrcess := dao.CheckById[entity.Process](processId, tx)
 	processVO := ToVO(pPrcess, tx)
-	pStep := StepService.FindStep(&processVO.Template.RootStep, startStepId)
+	pStep := StepService.FindStep(&processVO.Template.RootStep, startStepId, tx)
 	if nil == pStep || pStep.Id < 1 {
 		panic(ServerError.New("无效的流程步骤id"))
 	}

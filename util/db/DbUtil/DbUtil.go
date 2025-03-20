@@ -60,7 +60,3 @@ func Setup() {
 
 	Db = db
 }
-
-func GetTx() *gorm.DB {
-	return Db.Begin()
-}

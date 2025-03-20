@@ -6,7 +6,6 @@ import (
 	"github.com/hothotsavage/gstep/model/dto"
 	"github.com/hothotsavage/gstep/model/entity"
 	"github.com/hothotsavage/gstep/model/vo"
-	"github.com/hothotsavage/gstep/util/db/DbUtil"
 	"gorm.io/gorm"
 )
 
@@ -23,7 +22,7 @@ func ToVo(bean entity.Department, tx *gorm.DB) vo.DepartmentVo {
 }
 
 func GetChildDepartments(dto dto.DepartmentQueryChildDto, tx *gorm.DB) []vo.DepartmentVo {
-	childDepartments := DepartmentDao.GetChildDepartments(dto.ParentId, DbUtil.Db)
+	childDepartments := DepartmentDao.GetChildDepartments(dto.ParentId, tx)
 	vos := []vo.DepartmentVo{}
 	for _, v := range childDepartments {
 		aVo := ToVo(v, tx)
@@ -33,6 +32,6 @@ func GetChildDepartments(dto dto.DepartmentQueryChildDto, tx *gorm.DB) []vo.Depa
 }
 
 func GetDepartmentUsers(dto dto.DepartmentQueryUsersDto, tx *gorm.DB) []entity.User {
-	users := UserDao.GetDepartmentUsers(dto.DepartmentId, DbUtil.Db)
+	users := UserDao.GetDepartmentUsers(dto.DepartmentId, tx)
 	return users
 }
