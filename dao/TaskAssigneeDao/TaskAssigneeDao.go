@@ -14,7 +14,8 @@ func PassCount(taskId int, tx *gorm.DB) int {
 	return int(count)
 }
 
-func CheckAssigneeCanSubmit(taskId int, userId string, tx *gorm.DB) {
+// 检查执行人是否重复提交任务
+func CheckExecutorCanSubmit(taskId int, userId string, tx *gorm.DB) {
 	task := dao.CheckById[entity.Task](taskId, tx)
 	if task.State == TaskState.PASS.Code {
 		panic(ServerError.New("任务通过,不可重复提交"))
@@ -23,8 +24,8 @@ func CheckAssigneeCanSubmit(taskId int, userId string, tx *gorm.DB) {
 		panic(ServerError.New("任务驳回,不可重复提交"))
 	}
 
-	record := entity.TaskAssignee{}
-	tx.Table("task_assignee").Where("task_id=? and user_id=?", taskId, userId).Order("create_at desc").First(&record)
+	record := entity.Executor{}
+	tx.Table("executor").Where("task_id=? and user_id=? and (state=? or state=?)", taskId, userId, TaskState.PASS.Code, TaskState.REFUSE.Code).Order("create_at desc").First(&record)
 	if record.Id > 0 {
 		panic(ServerError.New("重复提交任务"))
 	}

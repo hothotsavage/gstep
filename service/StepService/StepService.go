@@ -1,6 +1,7 @@
 package StepService
 
 import (
+	"fmt"
 	"github.com/hothotsavage/gstep/dao/DepartmentDao"
 	"github.com/hothotsavage/gstep/dao/UserDao"
 	"github.com/hothotsavage/gstep/enum/CandidateCat"
@@ -188,7 +189,7 @@ func CheckStepCandidate(userId string, form *map[string]any, templateId int, ste
 		}
 	}
 
-	panic(ServerError.New("流程提交人不在候选人列表中"))
+	panic(ServerError.New(fmt.Sprintf("流程提交人(userId=%s)不在步骤(%s)候选人列表中", userId, pStep.Title)))
 }
 
 // 候选人条数

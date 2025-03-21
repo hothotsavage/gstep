@@ -104,11 +104,23 @@ func IsProcessFinish(processId int, tx *gorm.DB) bool {
 	return cnt < 1
 }
 
-// 删除未开始的任务
-func DeleteUnstartTasks(processId int, tx *gorm.DB) {
-	err := tx.Exec("delete from task where process_id=? and state=?", processId, TaskState.UNSTART.Code).Error
+// 删除未开始的任务列表和执行人列表
+func DeleteUnstartTasksAndExecutors(processId int, tx *gorm.DB) {
+	err := tx.Exec("delete from executor "+
+		" where 1=1 "+
+		" and process_id=? "+
+		" and exists(select 1 "+
+		" from task t "+
+		" where t.id=executor.task_id "+
+		" and t.state=?) ", processId, TaskState.UNSTART.Code).Error
 	if nil != err {
-		msg := fmt.Sprintf("删除下一步任务列表失败(processId=%d)失败: %s", processId, err)
+		msg := fmt.Sprintf("删除未启动任务的执行人列表失败(processId=%d)失败: %s", processId, err)
+		panic(ServerError.New(msg))
+	}
+
+	err = tx.Exec("delete from task where process_id=? and state=?", processId, TaskState.UNSTART.Code).Error
+	if nil != err {
+		msg := fmt.Sprintf("删除未启动任务列表失败(processId=%d)失败: %s", processId, err)
 		panic(ServerError.New(msg))
 	}
 }
@@ -117,7 +129,7 @@ func DeleteUnstartTasks(processId int, tx *gorm.DB) {
 func GetRefusePrevSteps(processId int, tx *gorm.DB) []int {
 	var ids []int
 	maxRefuseId := 0
-	err := tx.Raw("select max(id) from task "+
+	err := tx.Raw("select ifnull(max(id),0) from task "+
 		" where process_id = ? and state=?", processId, TaskState.REFUSE.Code).Scan(&maxRefuseId).Error
 	if nil != err {
 		msg := fmt.Sprintf("查询流程(processId=%d)的最大拒绝taskId失败: %s", processId, err)
@@ -132,4 +144,22 @@ func GetRefusePrevSteps(processId int, tx *gorm.DB) []int {
 		panic(ServerError.New(msg))
 	}
 	return ids
+}
+
+// 查询流程的回退步骤的任务
+func GetPrevTaskByStepId(processId int, prevStepId int, tx *gorm.DB) entity.Task {
+	tasks := []entity.Task{}
+	err := tx.Raw("select * from task where process_id=? "+
+		" and state=?"+
+		" and step_id=? ", processId, TaskState.PASS.Code, prevStepId).Scan(&tasks).Error
+	if nil != err {
+		msg := fmt.Sprintf("查询流程(processId=%d)的回退步骤(stepId=%d)的任务列表失败: %s", processId, prevStepId, err)
+		panic(ServerError.New(msg))
+	}
+	if len(tasks) == 0 {
+		msg := fmt.Sprintf("找不到流程(processId=%d)的回退步骤(stepId=%d)的任务列表", processId, prevStepId)
+		panic(ServerError.New(msg))
+	}
+
+	return tasks[0]
 }
