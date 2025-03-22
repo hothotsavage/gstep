@@ -60,7 +60,7 @@ func CheckById[T entity.CommonEntity, I int | string](id I, tx *gorm.DB) *T {
 	var detail T
 	err := tx.Table(detail.TableName()).Where("id=?", id).First(&detail).Error
 	if nil != err {
-		panic(ServerError.New(fmt.Sprintf("未找到(表:%s id=%s)记录:%s", detail.TableName(), id, err.Error())))
+		panic(ServerError.New(fmt.Sprintf("未找到(表:%s id=%d)记录:%s", detail.TableName(), id, err.Error())))
 	}
 
 	newId := detail.GetId()
@@ -85,4 +85,12 @@ func CheckId(id any) error {
 	}
 
 	return nil
+}
+
+func DeleteById[T entity.CommonEntity, I int | string](id I, tx *gorm.DB) {
+	var detail T
+	res := tx.Delete(&detail, id)
+	if res.Error != nil {
+		fmt.Println("删除(table=%s)失败 ", detail.TableName(), res.Error)
+	}
 }

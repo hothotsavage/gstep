@@ -5,6 +5,7 @@ import (
 	"github.com/hothotsavage/gstep/config"
 	"github.com/hothotsavage/gstep/ctx"
 	"github.com/hothotsavage/gstep/route/handler/DepartmentHandler"
+	"github.com/hothotsavage/gstep/route/handler/MouldHandler"
 	"github.com/hothotsavage/gstep/route/handler/NotifyHandler"
 	"github.com/hothotsavage/gstep/route/handler/PositionHandler"
 	"github.com/hothotsavage/gstep/route/handler/ProcessHandler"
@@ -17,6 +18,7 @@ import (
 	"github.com/hothotsavage/gstep/util/net/RequestParsUtil"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"time"
 )
 
@@ -117,6 +119,10 @@ func transaction(h http.HandlerFunc) http.HandlerFunc {
 		defer func() {
 			if er := recover(); er != nil {
 				tx.Rollback()
+
+				log.Println(er)
+				log.Println(string(debug.Stack()))
+
 				AjaxJson.Fail(fmt.Sprintf("%s", er)).Response(w)
 				return
 			}
@@ -152,15 +158,23 @@ func Setup() {
 func setupRoutes() {
 	//1.流程模板
 	//保存
+	Mux.HandleFunc("/mould/save", noAuthMiddleware(MouldHandler.Save))
+	//查询
+	Mux.HandleFunc("/mould/list", noAuthMiddleware(MouldHandler.List))
+	//详情
+	Mux.HandleFunc("/mould/detail", noAuthMiddleware(MouldHandler.Detail))
+	Mux.HandleFunc("/mould/delete", noAuthMiddleware(MouldHandler.Delete))
+
+	Mux.HandleFunc("/template/new_draft", noAuthMiddleware(TemplateHandler.NewDraft))
+	Mux.HandleFunc("/template/release", noAuthMiddleware(TemplateHandler.Release))
+	//保存
 	Mux.HandleFunc("/template/save", noAuthMiddleware(TemplateHandler.Save))
 	//查询
 	Mux.HandleFunc("/template/query", noAuthMiddleware(TemplateHandler.Query))
 	//详情
 	Mux.HandleFunc("/template/detail", noAuthMiddleware(TemplateHandler.Detail))
-	//基本信息
-	Mux.HandleFunc("/template/info", noAuthMiddleware(TemplateHandler.Info))
-	//保存基本信息
-	Mux.HandleFunc("/template/save_info", noAuthMiddleware(TemplateHandler.SaveInfo))
+	//删除
+	Mux.HandleFunc("/template/delete", noAuthMiddleware(TemplateHandler.Delete))
 
 	//2.流程实例
 	//启动流程

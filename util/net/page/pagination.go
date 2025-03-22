@@ -1,6 +1,6 @@
 package pagination
 
-type Pagination struct {
+type Pagination[T any] struct {
 	Total int `json:"total"`
-	List  any `json:"list"`
+	List  []T `json:"list"`
 }

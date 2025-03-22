@@ -31,8 +31,8 @@ func SuccessByData(data any) *AjaxJson {
 	}
 }
 
-func SuccessByPagination(datas any, total int) *AjaxJson {
-	pagination := pagination.Pagination{}
+func SuccessByPagination[T any](datas []T, total int) *AjaxJson {
+	pagination := pagination.Pagination[T]{}
 	pagination.List = datas
 	pagination.Total = total
 

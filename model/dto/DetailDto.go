@@ -1,5 +1,5 @@
 package dto
 
 type DetailDto struct {
-	Id int
+	Id int `json:"id"`
 }

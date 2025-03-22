@@ -11,6 +11,7 @@ type Template struct {
 	Version  int     `json:"version"`
 	RootStep Step    `json:"rootStep" gorm:"serializer:json"`
 	Fields   []Field `json:"fields" gorm:"serializer:json"`
+	State    string  `json:"state"`
 }
 
 func (e Template) TableName() string {
