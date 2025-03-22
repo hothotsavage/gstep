@@ -16,11 +16,11 @@ import (
 	"github.com/hothotsavage/gstep/model/entity"
 	"github.com/hothotsavage/gstep/model/vo"
 	"github.com/hothotsavage/gstep/service/StepService"
-	"github.com/hothotsavage/gstep/service/TaskAssigneeService"
 	"github.com/hothotsavage/gstep/util/ExpressionUtil"
 	"github.com/hothotsavage/gstep/util/LocalTime"
 	"github.com/hothotsavage/gstep/util/ServerError"
 	"github.com/hothotsavage/gstep/util/db/dao"
+	"github.com/spf13/cast"
 	"gorm.io/gorm"
 	"time"
 )
@@ -134,7 +134,7 @@ func NewTaskByStep(pStep *entity.Step, pProcess *entity.Process, pTaskForm *map[
 	task.Title = pStep.Title
 	task.Category = pStep.Category
 	task.AuditMethod = pStep.AuditMethod
-	task.Form = nil
+	task.Form = pTaskForm
 	task.State = TaskState.UNSTART.Code
 	dao.SaveOrUpdate(&task, tx)
 
@@ -149,7 +149,7 @@ func NewTaskByStep(pStep *entity.Step, pProcess *entity.Process, pTaskForm *map[
 		executor.UserId = pProcess.StartUserId
 		executor.State = TaskState.UNSTART.Code
 		executor.SubmitIndex = 0
-		executor.Form = nil
+		executor.Form = pTaskForm
 		executor.Memo = ""
 		dao.SaveOrUpdate(&executor, tx)
 		executors = append(executors, executor)
@@ -175,7 +175,6 @@ func NewStartTask(pProcess *entity.Process, startUserId string, form *map[string
 	task.Form = form
 	task.Category = rootStep.Category
 	task.State = TaskState.PASS.Code
-	//task.Candidates = MakeCandidates(rootStep, form, tx)
 	task.AuditMethod = rootStep.AuditMethod
 	if strutil.IsBlank(task.AuditMethod) {
 		task.AuditMethod = AuditMethodCat.OR.Code
@@ -329,41 +328,20 @@ func CheckCandidate(userId string, taskId int, tx *gorm.DB) {
 		return
 	}
 
+	candidateStr := ""
 	for _, executor := range executors {
+		candidateStr = candidateStr + executor.UserId + ","
+
 		if executor.UserId == userId {
 			return
 		}
 	}
 
-	panic(ServerError.New(fmt.Sprintf("流程提交人(userId=%s)不在任务(%s)候选人列表中", userId, task.Title)))
-}
-
-// 创建任务的候选人列表
-func MakeCandidates(step entity.Step, form *map[string]any, tx *gorm.DB) []string {
-	userIds := []string{}
-	for _, c := range step.Candidates {
-		if c.Category == CandidateCat.USER.Code {
-			if strutil.IsNotBlank(c.Value) {
-				userIds = append(userIds, c.Value)
-			}
-		} else if c.Category == CandidateCat.FIELD.Code {
-			userId := (*form)[c.Value]
-			if nil == userId {
-				panic(ServerError.New(fmt.Sprintf("表单中没有字段名为(%s)的值", c.Value)))
-			}
-			if strutil.IsNotBlank(userId.(string)) {
-				userIds = append(userIds, userId.(string))
-			}
-		} else if c.Category == CandidateCat.DEPARTMENT.Code {
-			users := UserDao.GetGrandsonDepartmentUsers(c.Value, tx)
-			for _, user := range users {
-				if strutil.IsNotBlank(user.Id) {
-					userIds = append(userIds, user.Id)
-				}
-			}
-		}
+	//删除末尾的逗号
+	if len(candidateStr) > 0 {
+		candidateStr = candidateStr[:len(candidateStr)-1]
 	}
-	return userIds
+	panic(ServerError.New(fmt.Sprintf("流程提交人(userId=%s)不在任务(%s)候选人(%s)中", userId, task.Title, candidateStr)))
 }
 
 // 创建任务的候选人列表
@@ -376,12 +354,31 @@ func ReMakeExecutors(processId int, taskId int, step entity.Step, pTaskForm *map
 				userIds = append(userIds, c.Value)
 			}
 		} else if c.Category == CandidateCat.FIELD.Code {
-			userId := (*pTaskForm)[c.Value]
-			if nil == userId {
+			formValue := (*pTaskForm)[c.Value]
+			if nil == formValue {
 				panic(ServerError.New(fmt.Sprintf("任务表单中没有字段(%s)", c.Value)))
 			}
-			if strutil.IsNotBlank(userId.(string)) {
-				userIds = append(userIds, userId.(string))
+			switch formValue.(type) {
+			case string:
+				userId := formValue.(string)
+				if strutil.IsBlank(userId) {
+					panic(ServerError.New(fmt.Sprintf("任务表单中字段(%s)值为空", c.Value)))
+				}
+
+				dao.CheckById[entity.User](userId, tx)
+				userIds = append(userIds, userId)
+			case []interface{}:
+				formCandidateUserIds := cast.ToStringSlice(formValue)
+				if nil == formCandidateUserIds || len(formCandidateUserIds) < 1 {
+					panic(ServerError.New(fmt.Sprintf("任务表单中字段(%s)值为空", c.Value)))
+				}
+				for _, userId := range formCandidateUserIds {
+					dao.CheckById[entity.User](userId, tx)
+					userIds = append(userIds, userId)
+				}
+				continue
+			default:
+				panic(ServerError.New(fmt.Sprintf("任务表单中字段(%s)类型错误", c.Value)))
 			}
 		} else if c.Category == CandidateCat.DEPARTMENT.Code {
 			users := UserDao.GetGrandsonDepartmentUsers(c.Value, tx)
@@ -405,7 +402,7 @@ func ReMakeExecutors(processId int, taskId int, step entity.Step, pTaskForm *map
 			executor.UserId = userId
 			executor.State = TaskState.UNSTART.Code
 			executor.SubmitIndex = 0
-			executor.Form = nil
+			executor.Form = pTaskForm
 			executor.Memo = ""
 			dao.SaveOrUpdate(&executor, tx)
 
@@ -418,87 +415,6 @@ func ReMakeExecutors(processId int, taskId int, step entity.Step, pTaskForm *map
 	return executors
 }
 
-// 创建任务的执行人实例
-func MakeAssignees(task entity.Task, form *map[string]any, tx *gorm.DB) {
-	//记录提交人的排序序号
-	submitIndex := 1
-	for _, userId := range task.Candidates {
-		assignee := entity.TaskAssignee{}
-		assignee.ProcessId = task.ProcessId
-		assignee.StepId = task.StepId
-		assignee.TaskId = task.Id
-		assignee.State = task.State
-		assignee.SubmitIndex = submitIndex
-		assignee.Form = form
-		assignee.UserId = userId
-		dao.SaveOrUpdate(&assignee, tx)
-		submitIndex++
-	}
-
-	////记录提交人的排序序号
-	//submitIndex := 1
-	//for _, c := range task.Candidates {
-	//	if c.Category == CandidateCat.USER.Code {
-	//		assignee := entity.TaskAssignee{}
-	//		assignee.ProcessId = task.ProcessId
-	//		assignee.StepId = task.StepId
-	//		assignee.TaskId = task.Id
-	//		assignee.State = task.State
-	//		assignee.SubmitIndex = submitIndex
-	//		assignee.Form = form
-	//		assignee.UserId = c.Value
-	//		dao.SaveOrUpdate(&assignee)
-	//	} else if c.Category == CandidateCat.FIELD.Code {
-	//		assignee := entity.TaskAssignee{}
-	//		assignee.ProcessId = task.ProcessId
-	//		assignee.StepId = task.StepId
-	//		assignee.TaskId = task.Id
-	//		assignee.State = task.State
-	//		assignee.SubmitIndex = submitIndex
-	//		assignee.Form = form
-	//		userId := (*form)[c.Value]
-	//		assignee.UserId = userId.(string)
-	//		dao.SaveOrUpdate(&assignee)
-	//	} else if c.Category == CandidateCat.DEPARTMENT.Code {
-	//		users := UserDao.GetGrandsonDepartmentUsers(c.Value)
-	//		for _, UserDao := range users {
-	//			assignee := entity.TaskAssignee{}
-	//			assignee.ProcessId = task.ProcessId
-	//			assignee.StepId = task.StepId
-	//			assignee.TaskId = task.Id
-	//			assignee.State = task.State
-	//			assignee.SubmitIndex = submitIndex
-	//			assignee.Form = form
-	//			assignee.UserId = UserDao.Id
-	//			dao.SaveOrUpdate(&assignee)
-	//		}
-	//	}
-	//	submitIndex++
-	//}
-}
-
-func GetTaskStateChangeVo(processId int, tx *gorm.DB) vo.TaskStateChangeNotifyVo {
-	notifyVo := vo.TaskStateChangeNotifyVo{}
-	pProcess := dao.CheckById[entity.Process](processId, tx)
-	notifyVo.Process = *pProcess
-
-	tasks := TaskAssigneeDao.GetTasksByLastSubmitIndex(processId, tx)
-
-	taskVos := []vo.TaskStateChangeNotifyTaskVo{}
-	for _, v := range tasks {
-		taskVo := vo.TaskStateChangeNotifyTaskVo{}
-		taskVo.Task = v
-
-		assignees := TaskAssigneeDao.GetLastSubmitAssigneesByTask(v.ProcessId, v.Id, tx)
-		taskVo.Assignees = assignees
-
-		taskVos = append(taskVos, taskVo)
-	}
-	notifyVo.Tasks = taskVos
-
-	return notifyVo
-}
-
 func GetTasksByProcessId(processId int, tx *gorm.DB) []entity.Task {
 	tasks := []entity.Task{}
 	tx.Raw("select * from task where process_id=? order by id asc", processId).Scan(&tasks)
@@ -508,19 +424,8 @@ func GetTasksByProcessId(processId int, tx *gorm.DB) []entity.Task {
 func ToVO(task entity.Task, tx *gorm.DB) vo.TaskVO {
 	aVO := vo.TaskVO{}
 	aVO.Task = task
-	assignees := TaskAssigneeDao.GetAssigneesByTaskId(task.Id, tx)
-	assigneeVOS := []vo.TaskAssigneeVO{}
-	for _, v := range assignees {
-		assigneeVO := TaskAssigneeService.ToVO(v, tx)
-		assigneeVOS = append(assigneeVOS, assigneeVO)
-	}
-	aVO.Assignees = assigneeVOS
+	executors := ExecutorDao.GetTaskExecutors(task.Id, tx)
+	aVO.Executors = executors
 
-	candidateUsers := []entity.User{}
-	for _, v := range aVO.Candidates {
-		user := dao.GetById[entity.User](v, tx)
-		candidateUsers = append(candidateUsers, *user)
-	}
-	aVO.CandidateUsers = candidateUsers
 	return aVO
 }

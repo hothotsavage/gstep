@@ -2,6 +2,7 @@ package StepService
 
 import (
 	"fmt"
+	"github.com/gookit/goutil/strutil"
 	"github.com/hothotsavage/gstep/dao/DepartmentDao"
 	"github.com/hothotsavage/gstep/dao/UserDao"
 	"github.com/hothotsavage/gstep/enum/CandidateCat"
@@ -9,6 +10,7 @@ import (
 	"github.com/hothotsavage/gstep/model/entity"
 	"github.com/hothotsavage/gstep/util/ServerError"
 	"github.com/hothotsavage/gstep/util/db/dao"
+	"github.com/spf13/cast"
 	"gorm.io/gorm"
 )
 
@@ -162,7 +164,7 @@ func FindPrevAuditStepsByEndId(pRootStep *entity.Step, beginStepId int, endStepI
 }
 
 // 检查指定步骤的候选人
-func CheckStepCandidate(userId string, form *map[string]any, templateId int, stepId int, tx *gorm.DB) {
+func CheckStepCandidate(userId string, pTaskForm *map[string]any, templateId int, stepId int, tx *gorm.DB) {
 	pTemplate := dao.CheckById[entity.Template](templateId, tx)
 	pStep := FindStep(&pTemplate.RootStep, stepId, tx)
 	//没有候选人名单，表示所有人都可提交，直接通过
@@ -170,26 +172,59 @@ func CheckStepCandidate(userId string, form *map[string]any, templateId int, ste
 		return
 	}
 
+	candidateStr := ""
 	for _, v := range pStep.Candidates {
 		if v.Category == CandidateCat.USER.Code {
+			candidateStr += v.Value + ","
+
 			if userId == v.Value {
 				return
 			}
 		} else if v.Category == CandidateCat.DEPARTMENT.Code {
+			candidateStr += v.Value + ","
+
 			departments := DepartmentDao.GetGrandsonDepartments(v.Value, tx)
 			isIn := UserDao.IsUserInDepartments(userId, departments, tx)
 			if isIn {
 				return
 			}
 		} else if v.Category == CandidateCat.FIELD.Code {
-			formCandidate := (*form)[v.Value]
-			if formCandidate == userId {
-				return
+			candidateStr += v.Value + ","
+
+			formValue := (*pTaskForm)[v.Value]
+			if nil == formValue {
+				panic(ServerError.New(fmt.Sprintf("任务表单中没有字段(%s)", v.Value)))
+			}
+			switch formValue.(type) {
+			case string:
+				formCandidateUserId := formValue.(string)
+				if strutil.IsBlank(userId) {
+					panic(ServerError.New(fmt.Sprintf("任务表单中字段(%s)值为空", v.Value)))
+				}
+				if formCandidateUserId == userId {
+					return
+				}
+			case []interface{}:
+				formCandidateUserIds := cast.ToStringSlice(formValue)
+				if nil == formCandidateUserIds || len(formCandidateUserIds) < 1 {
+					panic(ServerError.New(fmt.Sprintf("任务表单中字段(%s)值为空", v.Value)))
+				}
+				for _, formUserId := range formCandidateUserIds {
+					if formUserId == userId {
+						return
+					}
+				}
+			default:
+				panic(ServerError.New(fmt.Sprintf("任务表单中字段(%s)类型错误", v.Value)))
 			}
 		}
 	}
 
-	panic(ServerError.New(fmt.Sprintf("流程提交人(userId=%s)不在步骤(%s)候选人列表中", userId, pStep.Title)))
+	//删除最后一个逗号
+	if len(candidateStr) > 0 {
+		candidateStr = candidateStr[:len(candidateStr)-1]
+	}
+	panic(ServerError.New(fmt.Sprintf("流程提交人(userId=%s)不在步骤(%s)候选人(%s)中", userId, pStep.Title, candidateStr)))
 }
 
 // 候选人条数

@@ -53,9 +53,6 @@ func Start(processStartDto *dto.ProcessStartDto, tx *gorm.DB) vo.NotifyVO {
 		notifyUserIds = TaskService.MakeTasks(process.Id, nextStep.Id, processStartDto.Form, tx)
 	}
 
-	//任务状态变更通知
-	//TaskService.NotifyTasksStateChange(process.Id)
-
 	//生成通知消息文案
 	notifyMessage := TaskService.MakeNotifyMessage(startTaskExecutor, tx)
 
@@ -85,7 +82,6 @@ func Pass(processPassDto dto.ProcessPassDto, tx *gorm.DB) vo.NotifyVO {
 	}
 
 	//更新任务候选人
-	//pStartedTask.Candidates = TaskService.MakeCandidates(startedStep, processPassDto.Form, tx)
 	TaskService.ReMakeExecutors(processPassDto.ProcessId, pStartedTask.Id, startedStep, processPassDto.Form, tx)
 	//检查候选人是否在候选人列表中
 	TaskService.CheckCandidate(processPassDto.UserId, pStartedTask.Id, tx)

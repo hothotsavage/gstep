@@ -11,7 +11,6 @@ type Task struct {
 	Title       string          `json:"title"`
 	Category    string          `json:"category"`
 	State       string          `json:"state"`
-	Candidates  []string        `json:"candidates" gorm:"serializer:json"`
 }
 
 func (e Task) TableName() string {

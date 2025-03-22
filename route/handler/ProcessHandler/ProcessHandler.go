@@ -20,9 +20,6 @@ func Start(writer http.ResponseWriter, request *http.Request) {
 	//创建流程及启动任务
 	vo := ProcessService.Start(&processStartDto, tx)
 
-	//任务状态变更通知
-	//TaskService.NotifyTasksStateChange(id)
-
 	AjaxJson.SuccessByData(vo).Response(writer)
 }
 
